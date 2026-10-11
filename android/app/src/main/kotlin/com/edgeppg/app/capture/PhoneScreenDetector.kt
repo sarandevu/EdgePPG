@@ -64,6 +64,11 @@ class PhoneScreenDetector(
             "tablet computer", "cellular phone"
         )
 
+        // Specific keywords indicating 2D photo / print presentation media
+        private val MEDIA_KEYWORDS = setOf(
+            "photograph", "picture", "poster", "snapshot", "portrait"
+        )
+
         // Keywords indicating documents, paper, or identity cards that should suppress false spoof alarms
         private val DOCUMENT_KEYWORDS = setOf(
             "document", "identity document", "paper", "card", "business card",
@@ -140,25 +145,45 @@ class PhoneScreenDetector(
         val handSnap = com.edgeppg.app.behavior.GestureTracker.getLatestSnapshot()
         val isHandPresent = handSnap.isHandPresent || (System.currentTimeMillis() - handSnap.timestampMs < 2500L)
 
-        // --- Layer 1 & 2: Multi-Cue Screen Replay Verification ---
-        // A true screen presentation attack exhibits BOTH extreme depth planarity collapse
-        // AND rectangular screen bezel boundaries enclosing the face.
+        val isRot = (rotationDegrees == 90 || rotationDegrees == 270)
+        val upW = if (isRot) image.height else image.width
+        val upH = if (isRot) image.width else image.height
+        val bw = faceBox?.width() ?: 0
+        val bh = faceBox?.height() ?: 0
+        val faceCoverageW = if (upW > 0) bw.toFloat() / upW.toFloat() else 0f
+        val faceCoverageH = if (upH > 0) bh.toFloat() / upH.toFloat() else 0f
+        val isTouchingEdges = faceBox != null && (
+            faceBox.left <= upW * 0.04f || faceBox.right >= upW * 0.96f ||
+            faceBox.top <= upH * 0.04f || faceBox.bottom >= upH * 0.96f
+        )
+
+        // --- Layer 1 & 2: Multi-Cue Screen Replay & 2D Image Verification ---
         val planarityScore = evaluateMeshPlanarity(meshPoints)
-        val bezelScore = if (faceBox != null && !faceBox.isEmpty && planarityScore >= 0.50f) {
+        val bezelScore = if (faceBox != null && !faceBox.isEmpty && planarityScore >= 0.40f) {
             evaluateScreenBezelEdges(image, faceBox, rotationDegrees)
         } else 0f
 
-        if (planarityScore >= 0.85f && bezelScore >= 0.60f) {
+        // Mode A: Close-Up Presentation Attack (photo or screen held so close that edges/phone are cropped out)
+        if (faceCoverageW >= 0.58f || faceCoverageH >= 0.62f || (faceCoverageW >= 0.48f && isTouchingEdges)) {
+            detectedByThisFrame = true
+            primaryReason = "2d-close-up-spoof:face-cropped-or-too-close(${"%.2f".format(faceCoverageW)})"
+            maxConfidence = 0.92f
+        } else if (planarityScore >= 0.75f) {
+            // Mode B: 2D Planar Surface Collapse (flat photo or screen replay without bezel)
+            detectedByThisFrame = true
+            primaryReason = "2d-planar-spoof:planarity=${"%.2f".format(planarityScore)}"
+            maxConfidence = planarityScore
+        } else if (planarityScore >= 0.50f && bezelScore >= 0.50f) {
+            // Mode C: Screen Replay with visible bezel
             detectedByThisFrame = true
             primaryReason = "screen-replay-detected:planarity=${"%.2f".format(planarityScore)}|bezel=${"%.2f".format(bezelScore)}"
             maxConfidence = max(planarityScore, bezelScore)
         }
 
-        // --- Layer 3: ML Kit Image Labeling / Electronic Device Recognition ---
+        // --- Layer 3: ML Kit Image Labeling / 2D Presentation & Device Recognition ---
         if (isRunningLabeler.compareAndSet(false, true)) {
             try {
                 val bmp = imageProxy.toBitmap()
-                val isRot = (rotationDegrees == 90 || rotationDegrees == 270)
                 val targetW = if (isRot) 240 else 320
                 val targetH = if (isRot) 320 else 240
                 val scaledBmp = Bitmap.createScaledBitmap(bmp, targetW, targetH, true)
@@ -181,24 +206,34 @@ class PhoneScreenDetector(
                             var matchedKeyword = false
                             var matchedConf = 0f
                             var matchedText = ""
+                            var isMedia = false
                             for (lbl in labels) {
                                 val text = lbl.text.lowercase().trim()
-                                val isMatch = PHONE_KEYWORDS.any { kw ->
-                                    text == kw || text.contains(kw)
-                                }
-                                if (isMatch && lbl.confidence >= labelConfidenceThreshold) {
+                                val isPhone = PHONE_KEYWORDS.any { kw -> text == kw || text.contains(kw) }
+                                val isPhoto = MEDIA_KEYWORDS.any { kw -> text == kw || text.contains(kw) }
+                                if (isPhone && lbl.confidence >= labelConfidenceThreshold) {
                                     matchedKeyword = true
                                     matchedConf = lbl.confidence
                                     matchedText = lbl.text
+                                    isMedia = false
+                                } else if (isPhoto && lbl.confidence >= 0.60f) {
+                                    matchedKeyword = true
+                                    matchedConf = lbl.confidence
+                                    matchedText = lbl.text
+                                    isMedia = true
                                 }
                             }
                             if (matchedKeyword) {
                                 consecutiveLabelHits++
                                 if (consecutiveLabelHits >= 2) {
                                     isPhoneDetected = true
-                                    lastReason = "device-label:$matchedText(${"%.2f".format(matchedConf)})"
+                                    lastReason = if (isMedia) {
+                                        "2d-media-label:$matchedText(${"%.2f".format(matchedConf)})"
+                                    } else {
+                                        "device-label:$matchedText(${"%.2f".format(matchedConf)})"
+                                    }
                                     phoneLatchUntilMs = System.currentTimeMillis() + 2500L
-                                    Log.stage("detector", "Secondary phone detected: $lastReason")
+                                    Log.stage("detector", "Presentation attack detected: $lastReason")
                                 }
                             } else {
                                 consecutiveLabelHits = 0

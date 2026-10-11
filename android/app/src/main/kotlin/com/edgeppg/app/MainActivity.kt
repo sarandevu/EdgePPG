@@ -1415,7 +1415,16 @@ class MainActivity : ComponentActivity(), FrameListener {
         controller.livePhoneReason = reason
         lifecycleScope.launch(Dispatchers.Main.immediate) {
             if (isDetected) {
-                faceStatusView.text = if (reason.isNotBlank()) "⚠️ SPOOF: $reason" else "⚠️ SPOOF: PHONE DETECTED"
+                val displayReason = when {
+                    reason.contains("too-close") || reason.contains("close-up") -> "2D SPOOF: IMAGE TOO CLOSE / CROPPED"
+                    reason.contains("2d-planar") -> "2D SPOOF: FLAT 2D IMAGE DETECTED"
+                    reason.contains("media-label") -> "2D SPOOF: PHOTO DETECTED"
+                    reason.contains("screen-replay") -> "SPOOF: SCREEN REPLAY DETECTED"
+                    reason.contains("device-label") -> "SPOOF: SECONDARY PHONE DETECTED"
+                    reason.isNotBlank() -> "SPOOF: $reason"
+                    else -> "SPOOF: 2D IMAGE / PHONE DETECTED"
+                }
+                faceStatusView.text = "⚠️ $displayReason"
                 faceStatusView.setTextColor(0xFFEF4444.toInt())
             } else {
                 if (facePresent) {
