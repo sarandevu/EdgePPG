@@ -159,12 +159,12 @@ class PhoneScreenDetector(
 
         // --- Layer 1 & 2: Multi-Cue Screen Replay & 2D Image Verification ---
         val planarityScore = evaluateMeshPlanarity(meshPoints)
-        val bezelScore = if (faceBox != null && !faceBox.isEmpty && planarityScore >= 0.40f) {
+        val bezelScore = if (faceBox != null && !faceBox.isEmpty) {
             evaluateScreenBezelEdges(image, faceBox, rotationDegrees)
         } else 0f
 
         // Mode A: Close-Up Presentation Attack (photo or screen held so close that edges/phone are cropped out)
-        if (faceCoverageW >= 0.58f || faceCoverageH >= 0.62f || (faceCoverageW >= 0.48f && isTouchingEdges)) {
+        if (faceCoverageW >= 0.72f || faceCoverageH >= 0.75f || (faceCoverageW >= 0.65f && isTouchingEdges)) {
             detectedByThisFrame = true
             primaryReason = "2d-close-up-spoof:face-cropped-or-too-close(${"%.2f".format(faceCoverageW)})"
             maxConfidence = 0.92f
@@ -173,11 +173,11 @@ class PhoneScreenDetector(
             detectedByThisFrame = true
             primaryReason = "2d-planar-spoof:planarity=${"%.2f".format(planarityScore)}"
             maxConfidence = planarityScore
-        } else if (planarityScore >= 0.50f && bezelScore >= 0.50f) {
+        } else if (bezelScore >= 0.55f) {
             // Mode C: Screen Replay with visible bezel
             detectedByThisFrame = true
-            primaryReason = "screen-replay-detected:planarity=${"%.2f".format(planarityScore)}|bezel=${"%.2f".format(bezelScore)}"
-            maxConfidence = max(planarityScore, bezelScore)
+            primaryReason = "screen-replay-detected:bezel=${"%.2f".format(bezelScore)}|planarity=${"%.2f".format(planarityScore)}"
+            maxConfidence = bezelScore
         }
 
         // --- Layer 3: ML Kit Image Labeling / 2D Presentation & Device Recognition ---
@@ -311,11 +311,11 @@ class PhoneScreenDetector(
         val isHandPresent = handSnap.isHandPresent && (System.currentTimeMillis() - handSnap.timestampMs < 1500L)
 
         val planarityScore = if (!isHandPresent) evaluateMeshPlanarity(meshPoints) else 0f
-        val bezelScore = if (!isHandPresent && faceBox != null && !faceBox.isEmpty && planarityScore >= 0.50f) {
+        val bezelScore = if (!isHandPresent && faceBox != null && !faceBox.isEmpty) {
             evaluateScreenBezelEdges(image, faceBox, rotationDegrees)
         } else 0f
 
-        if (planarityScore >= 0.85f && bezelScore >= 0.65f) {
+        if (bezelScore >= 0.55f || planarityScore >= 0.75f) {
             detectedByThisFrame = true
             primaryReason = "screen-replay-detected:planarity=${"%.2f".format(planarityScore)}|bezel=${"%.2f".format(bezelScore)}"
             maxConfidence = max(planarityScore, bezelScore)
@@ -430,63 +430,69 @@ class PhoneScreenDetector(
             return if (idx in 0 until yBuf.limit()) yBuf.get(idx).toInt() and 0xFF else 0
         }
 
-        // Bezel check zones: 12% to 35% margin to the left and right of face box in upright coordinate space
-        val leftBezelX = (box.left - (bw * 0.25f).toInt()).coerceIn(4, upW - 8)
-        val rightBezelX = (box.right + (bw * 0.25f).toInt()).coerceIn(4, upW - 8)
-        val topBezelY = (box.top - (bh * 0.20f).toInt()).coerceIn(4, upH - 8)
-        val bottomBezelY = (box.bottom + (bh * 0.20f).toInt()).coerceIn(4, upH - 8)
-
-        var strongLeft = 0
-        var totalLeft = 0
-        var y = box.top
-        while (y < box.bottom) {
-            val p0 = getPixel(leftBezelX - 3, y)
-            val p1 = getPixel(leftBezelX + 3, y)
-            val gradL = abs(p1 - p0)
-            if (gradL > 45) strongLeft++
-            totalLeft++
-            y += 8
+        // Multi-offset bezel check: scan outward from face box (15% to 95% of bw)
+        val xOffsets = floatArrayOf(0.15f, 0.25f, 0.38f, 0.55f, 0.75f, 0.95f)
+        var maxRatioL = 0f
+        for (off in xOffsets) {
+            val leftBezelX = (box.left - (bw * off).toInt()).coerceIn(4, upW - 8)
+            var strongLeft = 0
+            var totalLeft = 0
+            var y = box.top
+            while (y < box.bottom) {
+                val p0 = getPixel(leftBezelX - 3, y)
+                val p1 = getPixel(leftBezelX + 3, y)
+                if (abs(p1 - p0) > 40) strongLeft++
+                totalLeft++
+                y += 8
+            }
+            val rL = if (totalLeft > 0) strongLeft.toFloat() / totalLeft else 0f
+            if (rL > maxRatioL) maxRatioL = rL
         }
 
-        // Vertical gradient scan on right bezel
-        var strongRight = 0
-        var totalRight = 0
-        y = box.top
-        while (y < box.bottom) {
-            val p0 = getPixel(rightBezelX - 3, y)
-            val p1 = getPixel(rightBezelX + 3, y)
-            val gradR = abs(p1 - p0)
-            if (gradR > 45) strongRight++
-            totalRight++
-            y += 8
+        var maxRatioR = 0f
+        for (off in xOffsets) {
+            val rightBezelX = (box.right + (bw * off).toInt()).coerceIn(4, upW - 8)
+            var strongRight = 0
+            var totalRight = 0
+            var y = box.top
+            while (y < box.bottom) {
+                val p0 = getPixel(rightBezelX - 3, y)
+                val p1 = getPixel(rightBezelX + 3, y)
+                if (abs(p1 - p0) > 40) strongRight++
+                totalRight++
+                y += 8
+            }
+            val rR = if (totalRight > 0) strongRight.toFloat() / totalRight else 0f
+            if (rR > maxRatioR) maxRatioR = rR
         }
 
-        // Horizontal gradient scan on top bezel
-        var strongTop = 0
-        var totalTop = 0
-        var x = box.left
-        while (x < box.right) {
-            val p0 = getPixel(x, topBezelY - 3)
-            val p1 = getPixel(x, topBezelY + 3)
-            val gradT = abs(p1 - p0)
-            if (gradT > 45) strongTop++
-            totalTop++
-            x += 8
+        val yOffsets = floatArrayOf(0.15f, 0.25f, 0.40f)
+        var maxRatioT = 0f
+        for (off in yOffsets) {
+            val topBezelY = (box.top - (bh * off).toInt()).coerceIn(4, upH - 8)
+            var strongTop = 0
+            var totalTop = 0
+            var x = box.left
+            while (x < box.right) {
+                val p0 = getPixel(x, topBezelY - 3)
+                val p1 = getPixel(x, topBezelY + 3)
+                if (abs(p1 - p0) > 40) strongTop++
+                totalTop++
+                x += 8
+            }
+            val rT = if (totalTop > 0) strongTop.toFloat() / totalTop else 0f
+            if (rT > maxRatioT) maxRatioT = rT
         }
 
-        val rL = if (totalLeft > 0) strongLeft.toFloat() / totalLeft else 0f
-        val rR = if (totalRight > 0) strongRight.toFloat() / totalRight else 0f
-        val rT = if (totalTop > 0) strongTop.toFloat() / totalTop else 0f
-
-        // A phone screen framing a face MUST have bezels enclosing the face on multiple sides (both left and right, or top and side)
-        // A single-sided straight edge (such as an ID card held by the user or an open door) is NOT a framing screen bezel.
-        val isEnclosedBezel = (rL > 0.35f && rR > 0.35f) || (rT > 0.35f && (rL > 0.35f || rR > 0.35f))
+        // A phone screen framing a face exhibits rectangular borders on multiple sides
+        val isEnclosedBezel = (maxRatioL > 0.30f && maxRatioR > 0.30f) ||
+            (maxRatioT > 0.30f && (maxRatioL > 0.25f || maxRatioR > 0.25f))
         if (!isEnclosedBezel) return 0f
 
-        val avgRatio = (rL + rR + rT) / 3f
+        val avgRatio = (maxRatioL + maxRatioR + maxRatioT) / 3f
         return when {
-            avgRatio > 0.35f -> 0.85f // Distinct rectangular bezel border enclosing face
-            avgRatio > 0.25f -> 0.60f
+            avgRatio > 0.30f -> 0.85f // Distinct rectangular bezel border enclosing face
+            avgRatio > 0.22f -> 0.60f
             else -> 0.0f
         }
     }

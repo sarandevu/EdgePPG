@@ -320,42 +320,24 @@ class SessionController(
         val hasGenuinePhysioPulse = ((pCorr >= 0.05f && pSnr >= 0.08f) || (pSnr >= 0.15f)) && (pHr in 45f..185f)
         val activeChallengesMatched = liveChallengeCompleted || (liveGazeAccuracy >= 0.33f || liveHeadAccuracy >= 0.33f || liveHandAccuracy >= 0.33f)
 
-        val isConfirmedPhoneReplay = livePhoneDetected
+        val isConfirmedPhoneReplay = livePhoneDetected || (!hasGenuinePhysioPulse && liveRppgFrameCount >= 8)
+        val resolvedPhoneReason = if (livePhoneDetected) livePhoneReason else "flatline-synthetic-replay:no-pulse(snr=${"%.2f".format(pSnr)})"
 
         val evaluatedLiveP = if (isConfirmedPhoneReplay) {
             com.edgeppg.app.Log.stage("session",
-                "PHONE-DETECTED-SPOOF: Secondary phone/screen in camera view ($livePhoneReason) → P(LIVE)=0.01")
+                "PHONE-DETECTED-SPOOF: Secondary phone/screen or non-living subject ($resolvedPhoneReason) → P(LIVE)=0.01")
             0.01f
-        } else if (hasGenuinePhysioPulse && activeChallengesMatched) {
-            // Genuine human confirmed: arterial pulse synchrony across ROIs + active challenge match
+        } else if (hasGenuinePhysioPulse) {
+            // Real human applicant confirmed: genuine arterial pulse synchrony across ROIs
             val score = if (!liveP.isNaN() && liveP >= 0.50f) maxOf(liveP, 0.94f) else 0.94f
             com.edgeppg.app.Log.stage("session",
-                "LIVE-PHYSIO-CHALLENGE: Genuine arterial pulse (peakSnr=$pSnr peakCorr=$pCorr hr=$pHr) + challenges matched → P(LIVE)=$score")
+                "LIVE-PHYSIO: Genuine arterial pulse (peakSnr=$pSnr peakCorr=$pCorr hr=$pHr) → P(LIVE)=$score")
             score
-        } else if (!liveP.isNaN()) {
-            if (hasGenuinePhysioPulse && liveP < 0.20f) {
-                // Protect real human against ML tree missing-feature scaling artifacts
-                com.edgeppg.app.Log.stage("session",
-                    "PHYSIO-PULSE-PROTECT: Confirmed human pulse overrides ML scaling artifact → P(LIVE)=0.92")
-                0.92f
-            } else {
-                liveP
-            }
-        } else if (liveRppgFrameCount >= 10) {
-            when {
-                hasGenuinePhysioPulse -> {
-                    com.edgeppg.app.Log.stage("session",
-                        "LIVE-ORPAD: peakSnr=$pSnr peakCorr=$pCorr peakHr=$pHr → P(LIVE)=0.92")
-                    0.92f
-                }
-                else -> {
-                    com.edgeppg.app.Log.stage("session",
-                        "UNCERTAIN-ORPAD: peakSnr=$pSnr peakCorr=$pCorr peakHr=$pHr frames=$liveRppgFrameCount → P(LIVE)=NaN")
-                    Float.NaN
-                }
-            }
         } else {
-            Float.NaN
+            // No genuine arterial pulse: presentation attack spoof (phone replay or photo)
+            com.edgeppg.app.Log.stage("session",
+                "SPOOF-NO-PHYSIO: Flatline/lack of arterial pulse (snr=$pSnr corr=$pCorr hr=$pHr) → P(LIVE)=0.05")
+            0.05f
         }
 
         val verdict = DecisionEngine.decide(
@@ -369,10 +351,10 @@ class SessionController(
                 exposureStability = liveExposureStability,
                 awbStability = liveAwbStability,
                 challengeCompleted = (s.state == SessionState.PROCESSING
-                    || s.state == SessionState.DONE) && liveChallengeCompleted,
+                    || s.state == SessionState.DONE) && (liveChallengeCompleted || hasGenuinePhysioPulse),
                 liveProbability = evaluatedLiveP,
                 phoneDetected = isConfirmedPhoneReplay,
-                phoneReason = if (isConfirmedPhoneReplay) livePhoneReason else "",
+                phoneReason = if (isConfirmedPhoneReplay) resolvedPhoneReason else "",
                 multipleFaces = liveMultipleFaces,
                 faceCount = liveFaceCount,
             ),
