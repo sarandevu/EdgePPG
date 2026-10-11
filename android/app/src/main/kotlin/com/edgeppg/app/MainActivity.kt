@@ -1415,7 +1415,7 @@ class MainActivity : ComponentActivity(), FrameListener {
         controller.livePhoneReason = reason
         lifecycleScope.launch(Dispatchers.Main.immediate) {
             if (isDetected) {
-                faceStatusView.text = "⚠️ SPOOF: PHONE / SCREEN DETECTED"
+                faceStatusView.text = if (reason.isNotBlank()) "⚠️ SPOOF: $reason" else "⚠️ SPOOF: PHONE DETECTED"
                 faceStatusView.setTextColor(0xFFEF4444.toInt())
             } else {
                 if (facePresent) {

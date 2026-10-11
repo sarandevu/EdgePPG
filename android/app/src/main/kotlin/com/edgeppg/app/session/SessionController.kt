@@ -361,7 +361,7 @@ class SessionController(
         val verdict = DecisionEngine.decide(
             inputs = DecisionEngine.Inputs(
                 integrityOk = true,
-                hasFace = liveHasFace,
+                hasFace = liveHasFace || liveRppgFrameCount >= 15,
                 lockState = liveLocked,
                 contaminationFlag = liveContamination,
                 fps = liveFps,

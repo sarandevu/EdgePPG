@@ -39,11 +39,11 @@ import kotlin.math.min
  * routing in [SessionController] and [DecisionEngine].
  */
 class PhoneScreenDetector(
-    private val labelConfidenceThreshold: Float = 0.45f,
-    private val minConsecutiveDetections: Int = 2,
+    private val labelConfidenceThreshold: Float = 0.65f,
+    private val minConsecutiveDetections: Int = 3,
     private val labeler: ImageLabeler = ImageLabeling.getClient(
         ImageLabelerOptions.Builder()
-            .setConfidenceThreshold(0.40f)
+            .setConfidenceThreshold(0.50f)
             .build()
     ),
 ) {
@@ -61,8 +61,7 @@ class PhoneScreenDetector(
         // Specific keywords indicating actual secondary mobile phone screens
         private val PHONE_KEYWORDS = setOf(
             "mobile phone", "cell phone", "cellphone", "smartphone",
-            "tablet computer", "cellular phone", "telephone", "electronic device",
-            "screen", "computer monitor", "display", "tablet", "gadget"
+            "tablet computer", "cellular phone"
         )
 
         // Keywords indicating documents, paper, or identity cards that should suppress false spoof alarms
@@ -145,11 +144,11 @@ class PhoneScreenDetector(
         // A true screen presentation attack exhibits BOTH extreme depth planarity collapse
         // AND rectangular screen bezel boundaries enclosing the face.
         val planarityScore = evaluateMeshPlanarity(meshPoints)
-        val bezelScore = if (faceBox != null && !faceBox.isEmpty && planarityScore >= 0.40f) {
+        val bezelScore = if (faceBox != null && !faceBox.isEmpty && planarityScore >= 0.50f) {
             evaluateScreenBezelEdges(image, faceBox, rotationDegrees)
         } else 0f
 
-        if (planarityScore >= 0.80f && bezelScore >= 0.50f) {
+        if (planarityScore >= 0.85f && bezelScore >= 0.60f) {
             detectedByThisFrame = true
             primaryReason = "screen-replay-detected:planarity=${"%.2f".format(planarityScore)}|bezel=${"%.2f".format(bezelScore)}"
             maxConfidence = max(planarityScore, bezelScore)
@@ -198,7 +197,8 @@ class PhoneScreenDetector(
                                 if (consecutiveLabelHits >= 2) {
                                     isPhoneDetected = true
                                     lastReason = "device-label:$matchedText(${"%.2f".format(matchedConf)})"
-                                    phoneLatchUntilMs = System.currentTimeMillis() + 4500L
+                                    phoneLatchUntilMs = System.currentTimeMillis() + 2500L
+                                    Log.stage("detector", "Secondary phone detected: $lastReason")
                                 }
                             } else {
                                 consecutiveLabelHits = 0
@@ -233,7 +233,7 @@ class PhoneScreenDetector(
             }
         } else {
             consecutiveCleanFrames++
-            if (consecutiveCleanFrames >= 12) {
+            if (consecutiveCleanFrames >= 6) {
                 consecutiveDetections = 0
                 isPhoneDetected = false
                 lastReason = ""
