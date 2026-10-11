@@ -37,8 +37,8 @@ NOSE_TIP = 1
 NOSE_BRIDGE = 168
 CHIN = 152
 FOREHEAD_CENTER = 10
-LEFT_MOUTH_CORNER = 61
-RIGHT_MOUTH_CORNER = 291
+LEFT_MOUTH_CORNER = 291
+RIGHT_MOUTH_CORNER = 61
 
 
 def point(mesh, index):
@@ -74,15 +74,37 @@ def gaze_estimate(mesh):
     if eye_w < 1 or eye_h < 1:
         return GazeEstimate("CENTER", 0.0, eye_available=False)
     iris = point(mesh, RIGHT_IRIS_CENTER)
-    iris_x = iris[0] if not math.isnan(iris[0]) else 0.5
-    iris_y = iris[1] if not math.isnan(iris[1]) else 0.5
-    x_norm = max(-1.0, min(2.0, (iris_x - outer[0]) / eye_w)) - 0.5
-    y_norm = max(-1.0, min(2.0, (iris_y - top[1]) / eye_h)) - 0.5
+    has_refined_iris = not any(math.isnan(c) for c in iris)
+    if has_refined_iris:
+        iris_x = iris[0]
+        iris_y = iris[1]
+        x_norm = max(-1.0, min(2.0, (iris_x - outer[0]) / eye_w)) - 0.5
+        y_norm = max(-1.0, min(2.0, (iris_y - top[1]) / eye_h)) - 0.5
+    else:
+        nose = point(mesh, NOSE_BRIDGE)
+        left_inner = point(mesh, LEFT_EYE_INNER)
+        left_outer = point(mesh, LEFT_EYE_OUTER)
+        left_top = point(mesh, LEFT_EYE_TOP)
+        left_bot = point(mesh, LEFT_EYE_BOTTOM)
+        if not any(math.isnan(c) for c in (*nose, *left_inner, *left_outer)):
+            dR = abs(inner[0] - nose[0])
+            dL = abs(left_inner[0] - nose[0])
+            left_w = abs(left_inner[0] - left_outer[0])
+            avg_w = (eye_w + left_w) / 2.0
+            h_diff = (dR - dL) / avg_w if avg_w > 1.0 else 0.0
+            r_open = eye_h / eye_w
+            l_open = abs(left_bot[1] - left_top[1]) / left_w if left_w > 1.0 else r_open
+            avg_open = (r_open + l_open) / 2.0
+            x_norm = max(-1.0, min(1.0, h_diff * 0.8))
+            y_norm = max(-1.0, min(1.0, (avg_open - 0.30) * 1.5))
+        else:
+            x_norm = 0.0
+            y_norm = 0.0
     if abs(x_norm) < CENTER_THRESHOLD and abs(y_norm) < CENTER_THRESHOLD:
         direction = "CENTER"
         conf = 1.0 - (abs(x_norm) + abs(y_norm))
     elif abs(x_norm) >= CENTER_THRESHOLD:
-        direction = "RIGHT" if x_norm > 0 else "LEFT"
+        direction = "RIGHT" if x_norm < 0 else "LEFT"
         conf = max(0.0, min(1.0, abs(x_norm) - CENTER_THRESHOLD))
     else:
         direction = "DOWN" if y_norm > 0 else "UP"
@@ -121,7 +143,7 @@ def head_pose(mesh):
         return HeadPose(0.0, 0.0, 0.0, available=False)
     d_l = math.hypot(nose[0] - lm[0], nose[1] - lm[1])
     d_r = math.hypot(nose[0] - rm[0], nose[1] - rm[1])
-    yaw_rad = math.atan2(d_l - d_r, d_l + d_r)
+    yaw_rad = math.atan2(d_r - d_l, d_r + d_l)
     yaw_deg = yaw_rad * 180.0 / math.pi
     mid_y = 0.5 * (forehead[1] + chin[1])
     span_y = max(1.0, chin[1] - forehead[1])
@@ -228,8 +250,8 @@ def _frontal_face() -> list:
     set_pt(NOSE_TIP,        (100.0, 130.0, 0.0))
     set_pt(FOREHEAD_CENTER, (100.0, 30.0, 0.0))
     set_pt(CHIN,            (100.0, 220.0, 0.0))
-    set_pt(LEFT_MOUTH_CORNER, (80.0, 170.0, 0.0))
-    set_pt(RIGHT_MOUTH_CORNER,(120.0, 170.0, 0.0))
+    set_pt(LEFT_MOUTH_CORNER, (120.0, 170.0, 0.0))
+    set_pt(RIGHT_MOUTH_CORNER,(80.0, 170.0, 0.0))
     return out
 
 
@@ -276,27 +298,28 @@ class GazeEstimatorTests(unittest.TestCase):
         self.assertFalse(e.eye_available)
         self.assertEqual(e.direction, "CENTER")
 
-    def test_iris_right_of_center_means_right(self):
+    def test_iris_right_of_center_means_left(self):
         mesh = _frontal_face()
-        # Move iris to right side (toward RIGHT_EYE_INNER = x=60).
+        # Move iris to right side (toward RIGHT_EYE_INNER = x=60) => adduction => looking LEFT
         idx = RIGHT_IRIS_CENTER * 3
         mesh = list(mesh)
-        mesh[idx] = 58.0     # iris x near inner corner ⇒ x_norm > 0 ⇒ RIGHT
-        mesh[idx + 1] = 90.0
-        mesh[idx + 2] = 0.0
-        e = gaze_estimate(mesh)
-        self.assertEqual(e.direction, "RIGHT")
-        self.assertGreater(e.confidence, 0.0)
-
-    def test_iris_left_of_center_means_left(self):
-        mesh = _frontal_face()
-        idx = RIGHT_IRIS_CENTER * 3
-        mesh = list(mesh)
-        mesh[idx] = 42.0     # near outer corner ⇒ LEFT
+        mesh[idx] = 58.0     # iris x near inner corner ⇒ x_norm > 0 ⇒ LEFT
         mesh[idx + 1] = 90.0
         mesh[idx + 2] = 0.0
         e = gaze_estimate(mesh)
         self.assertEqual(e.direction, "LEFT")
+        self.assertGreater(e.confidence, 0.0)
+
+    def test_iris_left_of_center_means_right(self):
+        mesh = _frontal_face()
+        # Move iris to left side (toward RIGHT_EYE_OUTER = x=40) => abduction => looking RIGHT
+        idx = RIGHT_IRIS_CENTER * 3
+        mesh = list(mesh)
+        mesh[idx] = 42.0     # near outer corner ⇒ x_norm < 0 ⇒ RIGHT
+        mesh[idx + 1] = 90.0
+        mesh[idx + 2] = 0.0
+        e = gaze_estimate(mesh)
+        self.assertEqual(e.direction, "RIGHT")
 
     def test_iris_high_means_up(self):
         mesh = _frontal_face()
@@ -323,20 +346,18 @@ class HeadPoseSolverTests(unittest.TestCase):
         self.assertFalse(p.available)
 
     def test_yaw_positive_when_left_cheek_shorter(self):
-        # Simulate head turned right: right cheek (subject's) becomes
-        # shorter — i.e. distance from nose tip to RIGHT_MOUTH_CORNER
-        # decreases, distance to LEFT_MOUTH_CORNER increases.
+        # Simulate head turned left: left cheek (subject's) becomes
+        # shorter — i.e. distance from nose tip to LEFT_MOUTH_CORNER
+        # decreases, distance to RIGHT_MOUTH_CORNER increases.
         mesh = _frontal_face()
-        idx_rm = RIGHT_MOUTH_CORNER * 3
+        idx_lm = LEFT_MOUTH_CORNER * 3
         mesh = list(mesh)
-        # Push right mouth corner closer to the nose tip.
-        mesh[idx_rm] = 110.0
-        mesh[idx_rm + 1] = 150.0
+        # Push left mouth corner closer to the nose tip.
+        mesh[idx_lm] = 108.0
+        mesh[idx_lm + 1] = 150.0
         p = head_pose(mesh)
-        # When the subject turns their head right, our heuristic
-        # reports positive yaw (=TURN_LEFT in ChallengeSpec terms).
-        # We just check the sign is meaningful, not the exact value.
-        self.assertNotAlmostEqual(p.yaw_deg, 0.0, delta=5.0)
+        # When subject turns head left, yaw is positive (> 0) = TURN_LEFT
+        self.assertGreater(p.yaw_deg, 5.0)
 
     def test_pitch_positive_when_nose_high(self):
         # Pitched up: nose tip is closer to forehead.
@@ -383,16 +404,16 @@ class BehavioralRunnerTests(unittest.TestCase):
         self.assertFalse(success)
 
     def test_head_turn_left_match(self):
-        # Construct a yaw-positive mesh.
+        # Construct a yaw-positive mesh (turned left: left cheek foreshortened)
         mesh = _frontal_face()
-        idx_rm = RIGHT_MOUTH_CORNER * 3
+        idx_lm = LEFT_MOUTH_CORNER * 3
         mesh = list(mesh)
-        mesh[idx_rm] = 110.0
-        mesh[idx_rm + 1] = 150.0
+        mesh[idx_lm] = 108.0
+        mesh[idx_lm + 1] = 150.0
         p = head_pose(mesh)
-        if p.yaw_deg > 0:
-            outcome, _, success = observe("head", "TURN_LEFT", 0, 100, pose=p)
-            self.assertEqual(outcome, "MATCH")
+        self.assertGreater(p.yaw_deg, 0.0)
+        outcome, _, success = observe("head", "TURN_LEFT", 0, 100, pose=p)
+        self.assertEqual(outcome, "MATCH")
 
     def test_still_match_when_no_motion(self):
         mesh = _frontal_face()

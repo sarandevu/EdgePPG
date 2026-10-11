@@ -44,6 +44,7 @@ object BehavioralRunner {
         gaze: GazeEstimate? = null,
         pose: HeadPose? = null,
         gesture: HandGesture? = null,
+        handedness: String? = null,
         contaminationFlag: Boolean = false,
     ): BehavioralObservation {
         val latencyMs = abs(nowMs - startedAtMs)
@@ -54,63 +55,152 @@ object BehavioralRunner {
                 BehavioralOutcome.CONTAMINATED, latencyMs, success = false)
         }
 
-        val matched = when (requested) {
-            is ChallengeSpec.Gaze -> matchGaze(requested.direction, gaze)
-            is ChallengeSpec.Head -> matchHead(requested.orientation,
-                                                pose)
-            is ChallengeSpec.Hand -> matchHand(requested.gesture, gesture)
-            is ChallengeSpec.RemainStill -> matchStill(gaze, pose, gesture)
-            // Optical flashes are passive stimuli — there is no
-            // behavioral response to match against. The coroutine
-            // driver (BehaviourRunner) emits its own MATCH observation
-            // for OpticalFlash; if a non-coroutine caller reaches this
-            // path, treat it as "no response" (null).
-            is ChallengeSpec.OpticalFlash -> null
-        }
+        val matched = checkMatch(requested, gaze, pose, gesture, handedness)
 
         val outcome = when {
-            timedOut && matched == null -> BehavioralOutcome.TIMEOUT
             matched == true -> BehavioralOutcome.MATCH
             matched == false -> BehavioralOutcome.WRONG
+            timedOut -> BehavioralOutcome.TIMEOUT
             else -> BehavioralOutcome.TIMEOUT
         }
         val success = outcome == BehavioralOutcome.MATCH
         return BehavioralObservation(requested, outcome, latencyMs, success)
     }
 
+    /**
+     * Test whether an action is currently matching, opposite/wrong, or still in progress (null).
+     */
+    fun checkMatch(
+        requested: ChallengeSpec,
+        gaze: GazeEstimate? = null,
+        pose: HeadPose? = null,
+        gesture: HandGesture? = null,
+        handedness: String? = null,
+    ): Boolean? {
+        return when (requested) {
+            is ChallengeSpec.Gaze -> matchGaze(requested.direction, gaze, pose)
+            is ChallengeSpec.Head -> matchHead(requested.orientation, pose, gaze)
+            is ChallengeSpec.Hand -> matchHand(requested.gesture, gesture, handedness)
+            is ChallengeSpec.RemainStill -> matchStill(gaze, pose, gesture)
+            is ChallengeSpec.OpticalFlash -> null
+        }
+    }
+
     private fun matchGaze(
         requested: GazeDirection,
         gaze: GazeEstimate?,
+        pose: HeadPose? = null,
     ): Boolean? {
-        if (gaze == null) return null
-        if (requested == GazeDirection.CENTER) {
-            return gaze.direction == GazeDirection.CENTER
+        // Direct gaze match
+        if (gaze != null && gaze.eyeAvailable && gaze.direction == requested) return true
+
+        // Natural ergonomic co-movement: when asked to look down/up, natural head pitch assists
+        if (requested == GazeDirection.DOWN) {
+            if (pose != null && pose.available && pose.pitchDeg < -3.5f) return true
+        } else if (requested == GazeDirection.UP) {
+            if (pose != null && pose.available && pose.pitchDeg > 3.5f) return true
         }
-        return gaze.direction == requested
+
+        if (gaze == null || !gaze.eyeAvailable) return null
+        if (gaze.direction == GazeDirection.CENTER) {
+            return if (requested == GazeDirection.CENTER) true else null
+        }
+
+        // Only return false if opposite action is definitively detected
+        val isOppositeGaze = when (requested) {
+            GazeDirection.LEFT -> gaze.direction == GazeDirection.RIGHT
+            GazeDirection.RIGHT -> gaze.direction == GazeDirection.LEFT
+            GazeDirection.UP -> gaze.direction == GazeDirection.DOWN
+            GazeDirection.DOWN -> gaze.direction == GazeDirection.UP
+            GazeDirection.CENTER -> false
+        }
+        return if (isOppositeGaze) false else null
     }
 
     private fun matchHead(
         requested: HeadOrientation,
         pose: HeadPose?,
+        gaze: GazeEstimate? = null,
     ): Boolean? {
-        if (pose == null) return null
-        // Map the request to the relevant axis and check magnitude.
+        if (pose == null || !pose.available) {
+            // Fallback: gaze down/up satisfies head pitch when pose is transiently unavailable
+            if (requested == HeadOrientation.TURN_DOWN && gaze?.direction == GazeDirection.DOWN) return true
+            if (requested == HeadOrientation.TURN_UP && gaze?.direction == GazeDirection.UP) return true
+            return null
+        }
         return when (requested) {
-            HeadOrientation.TURN_LEFT -> pose.yawDeg > 12f
-            HeadOrientation.TURN_RIGHT -> pose.yawDeg < -12f
-            HeadOrientation.TURN_UP -> pose.pitchDeg > 8f
-            HeadOrientation.TURN_DOWN -> pose.pitchDeg < -8f
-            HeadOrientation.NOD -> abs(pose.rollDeg) > 10f
-            HeadOrientation.SHAKE_NO -> abs(pose.rollDeg) > 10f
+            HeadOrientation.TURN_LEFT -> when {
+                pose.yawDeg > 5.5f -> true
+                pose.yawDeg < -6.5f -> false // Turned right instead
+                else -> null // Frontal/neutral, in progress
+            }
+            HeadOrientation.TURN_RIGHT -> when {
+                pose.yawDeg < -5.5f -> true
+                pose.yawDeg > 6.5f -> false // Turned left instead
+                else -> null
+            }
+            HeadOrientation.TURN_UP -> when {
+                pose.pitchDeg > 3.5f || gaze?.direction == GazeDirection.UP -> true
+                pose.pitchDeg < -5.5f -> false // Tilted down instead
+                else -> null
+            }
+            HeadOrientation.TURN_DOWN -> when {
+                pose.pitchDeg < -3.5f || gaze?.direction == GazeDirection.DOWN -> true
+                pose.pitchDeg > 5.5f -> false // Tilted up instead
+                else -> null
+            }
+            HeadOrientation.NOD -> when {
+                abs(pose.pitchDeg) > 4.5f || abs(pose.rollDeg) > 6.0f -> true
+                abs(pose.yawDeg) > 10.0f -> false
+                else -> null
+            }
+            HeadOrientation.SHAKE_NO -> when {
+                abs(pose.yawDeg) > 5.5f || abs(pose.rollDeg) > 6.0f -> true
+                abs(pose.pitchDeg) > 8.0f -> false
+                else -> null
+            }
         }
     }
 
     private fun matchHand(
         requested: HandGesture,
         observed: HandGesture?,
+        handedness: String? = null,
     ): Boolean? {
-        if (observed == null) return null
-        return observed == requested
+        if (observed == null) return null // No hand gesture recognized yet -> keep waiting
+        return when (requested) {
+            HandGesture.RAISE_RIGHT -> when {
+                observed == HandGesture.RAISE_RIGHT -> true
+                observed == HandGesture.OPEN_PALM && (handedness == "Right" || handedness == null || handedness == "Center") -> true
+                observed == HandGesture.RAISE_LEFT || (observed == HandGesture.OPEN_PALM && handedness == "Left") -> false
+                else -> null
+            }
+            HandGesture.RAISE_LEFT -> when {
+                observed == HandGesture.RAISE_LEFT -> true
+                observed == HandGesture.OPEN_PALM && (handedness == "Left" || handedness == null || handedness == "Center") -> true
+                observed == HandGesture.RAISE_RIGHT || (observed == HandGesture.OPEN_PALM && handedness == "Right") -> false
+                else -> null
+            }
+            HandGesture.OPEN_PALM -> when {
+                observed == HandGesture.OPEN_PALM || observed == HandGesture.RAISE_RIGHT || observed == HandGesture.RAISE_LEFT -> true
+                observed == HandGesture.THUMBS_UP || observed == HandGesture.POINT -> false
+                else -> null
+            }
+            HandGesture.THUMBS_UP -> when {
+                observed == HandGesture.THUMBS_UP -> true
+                // Hand in view / raising hand towards camera: keep waiting, do NOT penalize as wrong action
+                observed == HandGesture.RAISE_RIGHT || observed == HandGesture.RAISE_LEFT -> null
+                observed == HandGesture.POINT || observed == HandGesture.OPEN_PALM -> false
+                else -> null
+            }
+            HandGesture.POINT -> when {
+                observed == HandGesture.POINT -> true
+                // Hand in view / raising hand / presenting palm while curling fingers: keep waiting
+                observed == HandGesture.RAISE_RIGHT || observed == HandGesture.RAISE_LEFT || observed == HandGesture.OPEN_PALM -> null
+                observed == HandGesture.THUMBS_UP -> false
+                else -> null
+            }
+        }
     }
 
     /**

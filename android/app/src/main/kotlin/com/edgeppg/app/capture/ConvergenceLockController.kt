@@ -66,11 +66,14 @@ class ConvergenceLockController(
         val ae = result.get(CaptureResult.CONTROL_AE_STATE)
         val awb = result.get(CaptureResult.CONTROL_AWB_STATE)
 
-        if (ae == CaptureResult.CONTROL_AE_STATE_CONVERGED) {
+        if (ae == CaptureResult.CONTROL_AE_STATE_CONVERGED ||
+            ae == CaptureResult.CONTROL_AE_STATE_LOCKED
+        ) {
             aeConverged = true
         }
         if (awb == null ||
-            awb == CaptureResult.CONTROL_AWB_STATE_CONVERGED
+            awb == CaptureResult.CONTROL_AWB_STATE_CONVERGED ||
+            awb == CaptureResult.CONTROL_AWB_STATE_LOCKED
         ) {
             awbConverged = true
         }

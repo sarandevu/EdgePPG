@@ -70,4 +70,50 @@ class DecisionEnginePhoneTest {
         assertEquals(DecisionEngine.Decision.SPOOF, verdict.decision)
         assertTrue(verdict.reason.startsWith("phone-detected-spoof"))
     }
+
+    @Test
+    fun decide_with_no_face_and_high_liveP_never_returns_live() {
+        // Fix 2.2 regression test: High P(LIVE) cannot override missing face
+        val inputs = DecisionEngine.Inputs(
+            integrityOk = true,
+            hasFace = false,
+            lockState = true,
+            contaminationFlag = false,
+            fps = 30f,
+            dropRate = 0f,
+            exposureStability = 0.95f,
+            awbStability = 0.95f,
+            challengeCompleted = true,
+            liveProbability = 0.99f,
+            phoneDetected = false,
+        )
+
+        val verdict = DecisionEngine.decide(inputs)
+        assertEquals(DecisionEngine.Decision.UNCERTAIN, verdict.decision)
+        assertEquals("insufficient-quality:no-face", verdict.reason)
+    }
+
+    @Test
+    fun decide_with_multiple_faces_never_returns_live_even_with_high_liveP() {
+        // Fix 2.1 regression test: Multiple faces must reject to UNCERTAIN
+        val inputs = DecisionEngine.Inputs(
+            integrityOk = true,
+            hasFace = true,
+            multipleFaces = true,
+            faceCount = 2,
+            lockState = true,
+            contaminationFlag = false,
+            fps = 30f,
+            dropRate = 0f,
+            exposureStability = 0.95f,
+            awbStability = 0.95f,
+            challengeCompleted = true,
+            liveProbability = 0.99f,
+            phoneDetected = false,
+        )
+
+        val verdict = DecisionEngine.decide(inputs)
+        assertEquals(DecisionEngine.Decision.UNCERTAIN, verdict.decision)
+        assertEquals("insufficient-quality:multiple-faces-detected", verdict.reason)
+    }
 }

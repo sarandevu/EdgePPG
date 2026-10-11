@@ -45,15 +45,40 @@ import kotlinx.coroutines.launch
 class BehaviourRunner(
     private val scope: CoroutineScope,
     private val flashOverlay: OpticalFlashOverlay? = null,
+    private val opticalEngine: com.edgeppg.app.optical.OpticalChallengeEngine? = null,
     /** Pulled from the camera pipeline each frame the UI gets a new
      *  FaceMesh result. The runner consumes the latest snapshot. */
     @Volatile var latestMeshPoints: FloatArray? = null,
     @Volatile var latestContaminationFlag: Boolean = false,
 ) {
 
+    companion object {
+        const val READING_PERIOD_MS = 2000L   // User instruction reading & TTS period
+        const val RESPONSE_WINDOW_MS = 6000L  // Active detection response window (extended for comfortable gesture response)
+        const val STABLE_HOLD_MS = 180L       // ~180ms / ~3 frames required for action acceptance
+        const val RESULT_DISPLAY_MS = 1500L   // 1.5s pause to display outcome before advancing
+    }
+
     sealed class BehaviourEvent {
         data class PromptShown(val spec: ChallengeSpec, val index: Int, val total: Int) :
             BehaviourEvent()
+        data class ChallengeStateTick(
+            val spec: ChallengeSpec,
+            val index: Int,
+            val total: Int,
+            val stage: Stage,
+            val remainingSec: Float,
+            val detail: String = ""
+        ) : BehaviourEvent() {
+            enum class Stage {
+                READY,           // Reading instruction
+                DETECTING,       // Active response window
+                ACTION_HELD,     // Holding pose/gesture for stability
+                ACTION_MATCHED,  // Action accepted
+                WRONG,           // Incorrect action attempted
+                TIMEOUT,         // Timeout expired
+            }
+        }
         data class FlashStarted(val spec: ChallengeSpec) : BehaviourEvent()
         data class FlashEnded(val spec: ChallengeSpec) : BehaviourEvent()
         data class Observation(val observation: BehavioralObservation) :
@@ -62,7 +87,7 @@ class BehaviourRunner(
     }
 
     private val _events = MutableSharedFlow<BehaviourEvent>(
-        replay = 0, extraBufferCapacity = 16
+        replay = 0, extraBufferCapacity = 32
     )
     val events: SharedFlow<BehaviourEvent> = _events.asSharedFlow()
 
@@ -77,9 +102,6 @@ class BehaviourRunner(
      * while a run is in flight is a no-op.
      */
     fun start(challenges: List<ChallengeSpec>) {
-        // Temporary lifecycle diagnostics for the first-launch
-        // investigation (hackathon): proves start() is reached, with
-        // how many challenges, and whether a previous run is stuck.
         com.edgeppg.app.Log.stage("behavior",
             "runner.start(${challenges.size}) running=$running scope=$scope")
         if (running) return
@@ -105,97 +127,262 @@ class BehaviourRunner(
         runJob?.cancel()
         runJob = null
         running = false
+        opticalEngine?.cancel(flashOverlay)
         flashOverlay?.cancel()
     }
 
     private suspend fun runAll(challenges: List<ChallengeSpec>) {
         val total = challenges.size
         for ((index, spec) in challenges.withIndex()) {
+            // Buffer isolation: reset detection history between challenges
+            latestMeshPoints = null
+            EyeTracker.reset()
+            GestureTracker.reset()
+
             _events.emit(BehaviourEvent.PromptShown(spec, index, total))
+
             if (spec is ChallengeSpec.OpticalFlash) {
                 _events.emit(BehaviourEvent.FlashStarted(spec))
-                flashOverlay?.showFlash(spec.color, spec.deltaPct, spec.durationMs)
-                // Wait the full flash duration so the rPPG DSP / camera
-                // sees a real stimulus on the face. The Stage 4 DSP
-                // (FR-OPT-3) is responsible for temporal separation.
-                delay(spec.durationMs)
+                val result = if (opticalEngine != null) {
+                    opticalEngine.execute(flashOverlay)
+                } else {
+                    flashOverlay?.showFlash(spec.color, spec.deltaPct, spec.durationMs)
+                    delay(spec.durationMs)
+                    null
+                }
                 _events.emit(BehaviourEvent.FlashEnded(spec))
-                // An optical flash challenge is a passive stimulus —
-                // there's no "user response" to wait for. Emit a MATCH
-                // observation so the row assembler records the
-                // presence of the challenge. A real device test
-                // (PR-VAL-1) would correlate the camera signal with
-                // the flash; that correlation lives in the DSP.
+                val outcome = if (result != null) {
+                    if (result.isValid || result.opticalResponseScore >= 0.05f) {
+                        BehavioralOutcome.MATCH
+                    } else {
+                        // Inconclusive due to ambient lighting / subtle flash contrast -> CONTAMINATED, never WRONG
+                        BehavioralOutcome.CONTAMINATED
+                    }
+                } else {
+                    BehavioralOutcome.MATCH
+                }
+                val latency = result?.timingErrorMs ?: spec.durationMs
                 _events.emit(
                     BehaviourEvent.Observation(
                         BehavioralObservation(
                             spec = spec,
-                            observed = BehavioralOutcome.MATCH,
-                            latencyMs = spec.durationMs,
-                            success = true,
+                            observed = outcome,
+                            latencyMs = latency,
+                            success = (outcome == BehavioralOutcome.MATCH),
                         )
                     )
                 )
                 if (index < total - 1) {
-                    delay(1200L)
+                    delay(RESULT_DISPLAY_MS)
                 }
                 continue
             }
-            // Behavioral challenge: wait for the timeout window.
-            // Continuously sample incoming mesh updates so if the user completes
-            // the requested action comfortably, we record the match immediately
-            // without forcing them to hold an uncomfortable pose until the full
-            // timeout expires. If they take longer, allow up to the full timeoutMs.
-            val started = System.currentTimeMillis()
-            val timeoutMs = spec.timeoutMs
-            var lastObs: BehavioralObservation? = null
-            while (System.currentTimeMillis() - started < timeoutMs) {
+
+            // Phase 1: READY / Instruction-reading & TTS period
+            val readingPeriod = when (spec) {
+                is ChallengeSpec.Hand -> 3000L // Ensure TTS finishes speaking full prompt
+                is ChallengeSpec.Head -> 2500L
+                else -> 2000L
+            }
+            val readyStart = System.currentTimeMillis()
+            while (System.currentTimeMillis() - readyStart < readingPeriod) {
+                val remSec = ((readingPeriod - (System.currentTimeMillis() - readyStart)) / 1000f).coerceAtLeast(0f)
+                _events.emit(
+                    BehaviourEvent.ChallengeStateTick(
+                        spec = spec,
+                        index = index,
+                        total = total,
+                        stage = BehaviourEvent.ChallengeStateTick.Stage.READY,
+                        remainingSec = remSec,
+                        detail = "Listen to prompt"
+                    )
+                )
+                delay(200L)
+            }
+
+            // Phase 2: Active Detection Window (per-challenge timeout)
+            val responseStart = System.currentTimeMillis()
+            val timeoutMs = spec.timeoutMs.coerceAtLeast(8_000L)
+            var matchStreak = 0
+            val requiredStreak = (STABLE_HOLD_MS / 60L).toInt().coerceAtLeast(3) // ~5 frames = ~300ms
+            var wrongStreak = 0
+            val requiredWrongStreak = 12 // ~720ms of sustained opposite/wrong action before flagging WRONG
+            var isMatched = false
+            var wrongDetected = false
+
+            while (System.currentTimeMillis() - responseStart < timeoutMs) {
                 delay(60L)
-                if (latestContaminationFlag) break
                 val now = System.currentTimeMillis()
+                val remSec = ((timeoutMs - (now - responseStart)) / 1000f).coerceAtLeast(0f)
+
                 val mesh = latestMeshPoints
-                val gaze = if (mesh != null && mesh.size >= MeshLandmarks.LEFT_IRIS_CENTER * 3 + 3) {
+                if (mesh != null && mesh.size >= 400 * 3) {
+                    EyeTracker.processMesh(mesh, now)
+                }
+                val eyeSnap = EyeTracker.getLatestSnapshot()
+                val gaze = if (eyeSnap != null && eyeSnap.isTrackingValid) {
+                    GazeEstimate(eyeSnap.smoothedDirection, eyeSnap.confidence, eyeAvailable = true)
+                } else if (mesh != null && mesh.size >= 400 * 3) {
                     GazeEstimator.estimate(mesh)
                 } else null
-                val pose = if (mesh != null && mesh.size >= MeshLandmarks.CHIN * 3 + 3) {
+
+                val pose = if (mesh != null && mesh.size >= 160 * 3) {
                     HeadPoseSolver.estimate(mesh)
                 } else null
-                val obs = BehavioralRunner.observe(
+
+                val gestureSnap = GestureTracker.getLatestSnapshot()
+                val gesture = if (!gestureSnap.isStale && gestureSnap.confidence >= 0.55f) gestureSnap.gesture else null
+
+                val match = BehavioralRunner.checkMatch(
                     requested = spec,
-                    startedAtMs = started,
-                    nowMs = now,
                     gaze = gaze,
                     pose = pose,
-                    contaminationFlag = latestContaminationFlag,
+                    gesture = gesture,
+                    handedness = gestureSnap.handedness,
                 )
-                lastObs = obs
-                // If an active challenge matched, pause briefly to ensure stable hold
-                if (spec !is ChallengeSpec.RemainStill && obs.success) {
-                    delay(400L)
-                    break
+                if (spec is ChallengeSpec.Hand) {
+                    com.edgeppg.app.Log.behavior(
+                        "HAND-TICK req=${spec.gesture} seen=${gestureSnap.label} side=${gestureSnap.handedness} " +
+                        "conf=${"%.2f".format(gestureSnap.confidence)} stale=${gestureSnap.isStale} " +
+                        "match=$match streak=$matchStreak wrong=$wrongStreak rem=${"%.1f".format(remSec)}"
+                    )
+                } else if (spec is ChallengeSpec.Head) {
+                    com.edgeppg.app.Log.behavior(
+                        "HEAD-TICK req=${spec.orientation} yaw=${"%.1f".format(pose?.yawDeg ?: 0f)} " +
+                        "pitch=${"%.1f".format(pose?.pitchDeg ?: 0f)} roll=${"%.1f".format(pose?.rollDeg ?: 0f)} " +
+                        "avail=${pose?.available} match=$match streak=$matchStreak wrong=$wrongStreak rem=${"%.1f".format(remSec)}"
+                    )
+                } else if (spec is ChallengeSpec.Gaze) {
+                    com.edgeppg.app.Log.behavior(
+                        "GAZE-TICK req=${spec.direction} dir=${gaze?.direction} conf=${"%.2f".format(gaze?.confidence ?: 0f)} " +
+                        "eyeSnapDir=${eyeSnap?.smoothedDirection} xNorm=${"%.2f".format(eyeSnap?.xNorm ?: 0f)} " +
+                        "yNorm=${"%.2f".format(eyeSnap?.yNorm ?: 0f)} yaw=${"%.1f".format(pose?.yawDeg ?: 0f)} " +
+                        "pitch=${"%.1f".format(pose?.pitchDeg ?: 0f)} match=$match streak=$matchStreak wrong=$wrongStreak rem=${"%.1f".format(remSec)}"
+                    )
+                }
+
+                if (spec is ChallengeSpec.RemainStill) {
+                    if (match == false) {
+                        wrongDetected = true
+                        _events.emit(
+                            BehaviourEvent.ChallengeStateTick(
+                                spec = spec,
+                                index = index,
+                                total = total,
+                                stage = BehaviourEvent.ChallengeStateTick.Stage.WRONG,
+                                remainingSec = remSec,
+                                detail = "Motion detected"
+                            )
+                        )
+                        break
+                    } else {
+                        _events.emit(
+                            BehaviourEvent.ChallengeStateTick(
+                                spec = spec,
+                                index = index,
+                                total = total,
+                                stage = BehaviourEvent.ChallengeStateTick.Stage.DETECTING,
+                                remainingSec = remSec,
+                                detail = "Holding still"
+                            )
+                        )
+                    }
+                } else {
+                    if (match == true) {
+                        wrongStreak = 0
+                        wrongDetected = false
+                        matchStreak++
+                        val heldMs = matchStreak * 60
+                        _events.emit(
+                            BehaviourEvent.ChallengeStateTick(
+                                spec = spec,
+                                index = index,
+                                total = total,
+                                stage = BehaviourEvent.ChallengeStateTick.Stage.ACTION_HELD,
+                                remainingSec = remSec,
+                                detail = "Hold steady: ${heldMs}ms / ${STABLE_HOLD_MS}ms"
+                            )
+                        )
+                        if (matchStreak >= requiredStreak) {
+                            isMatched = true
+                            _events.emit(
+                                BehaviourEvent.ChallengeStateTick(
+                                    spec = spec,
+                                    index = index,
+                                    total = total,
+                                    stage = BehaviourEvent.ChallengeStateTick.Stage.ACTION_MATCHED,
+                                    remainingSec = 0f,
+                                    detail = "Action recognized ✓"
+                                )
+                            )
+                            break
+                        }
+                    } else {
+                        // Leaky decay rather than instant zero reset on a single dropped frame
+                        if (matchStreak > 0) matchStreak--
+                        if (match == false) {
+                            wrongStreak++
+                            if (wrongStreak >= requiredWrongStreak) {
+                                wrongDetected = true
+                            }
+                        } else {
+                            wrongStreak = 0
+                        }
+                        _events.emit(
+                            BehaviourEvent.ChallengeStateTick(
+                                spec = spec,
+                                index = index,
+                                total = total,
+                                stage = BehaviourEvent.ChallengeStateTick.Stage.DETECTING,
+                                remainingSec = remSec,
+                                detail = if (wrongDetected) "Incorrect motion" else "Waiting for action"
+                            )
+                        )
+                    }
                 }
             }
-            val now = System.currentTimeMillis()
-            val observation = lastObs ?: run {
-                val mesh = latestMeshPoints
-                val gaze = if (mesh != null && mesh.size >= MeshLandmarks.LEFT_IRIS_CENTER * 3 + 3) {
-                    GazeEstimator.estimate(mesh)
-                } else null
-                val pose = if (mesh != null && mesh.size >= MeshLandmarks.CHIN * 3 + 3) {
-                    HeadPoseSolver.estimate(mesh)
-                } else null
-                BehavioralRunner.observe(
-                    requested = spec,
-                    startedAtMs = started,
-                    nowMs = now,
-                    gaze = gaze,
-                    pose = pose,
-                    contaminationFlag = latestContaminationFlag,
-                )
+
+            // Phase 3: Terminal State & Observation
+            val finalLatencyMs = System.currentTimeMillis() - responseStart
+            val outcome = when {
+                spec is ChallengeSpec.RemainStill -> if (!wrongDetected) BehavioralOutcome.MATCH else BehavioralOutcome.WRONG
+                isMatched -> BehavioralOutcome.MATCH
+                wrongDetected -> BehavioralOutcome.WRONG
+                else -> BehavioralOutcome.TIMEOUT
             }
+
+            val rawObs = BehavioralRunner.observe(
+                requested = spec,
+                startedAtMs = responseStart,
+                nowMs = System.currentTimeMillis(),
+                contaminationFlag = latestContaminationFlag,
+            )
+            val observation = rawObs.copy(
+                observed = outcome,
+                latencyMs = finalLatencyMs,
+                success = (outcome == BehavioralOutcome.MATCH)
+            )
+
+            val terminalStage = when (outcome) {
+                BehavioralOutcome.MATCH -> BehaviourEvent.ChallengeStateTick.Stage.ACTION_MATCHED
+                BehavioralOutcome.WRONG -> BehaviourEvent.ChallengeStateTick.Stage.WRONG
+                else -> BehaviourEvent.ChallengeStateTick.Stage.TIMEOUT
+            }
+            _events.emit(
+                BehaviourEvent.ChallengeStateTick(
+                    spec = spec,
+                    index = index,
+                    total = total,
+                    stage = terminalStage,
+                    remainingSec = 0f,
+                    detail = outcome.name
+                )
+            )
             _events.emit(BehaviourEvent.Observation(observation))
+
+            // Phase 4: Visible result display period (~1.5s) before next challenge
             if (index < total - 1) {
-                delay(2000L)
+                delay(RESULT_DISPLAY_MS)
             }
         }
         _events.emit(BehaviourEvent.AllComplete)

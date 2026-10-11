@@ -31,10 +31,11 @@ class LocalWifiTransport(
     private fun getCandidateBaseUrls(): List<String> {
         return if (baseUrl == DEFAULT_BASE_URL) {
             listOf(
-                "http://127.0.0.1:8080",
+                "http://192.168.112.130:8080",
+                "http://10.2.37.235:8080",
                 "http://10.65.167.49:8080",
                 "http://10.0.2.2:8080",
-                "http://10.2.37.235:8080",
+                "http://127.0.0.1:8080",
             )
         } else {
             listOf(baseUrl.trimEnd('/'))

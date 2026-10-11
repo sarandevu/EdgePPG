@@ -1,5 +1,7 @@
 package com.edgeppg.app.rppg
 
+import com.edgeppg.app.rppg.cfrppg.CfrppgEngine
+import com.edgeppg.app.rppg.cfrppg.CfrppgSnapshot
 import kotlin.math.cos
 import kotlin.math.ln
 import kotlin.math.sin
@@ -16,6 +18,8 @@ import kotlin.math.sqrt
  *  3. 256-point FFT → spectral peak HR, SNR.
  *  4. Pairwise Pearson correlation across ROIs.
  *  5. Quality-weighted confidence in [0, 1].
+ *  6. CFrPPG (Remote Photoplethysmography Correspondence Feature, ECCV 2018)
+ *     for multi-ROI spatial/spectral physiological consensus telemetry.
  *
  * The per-frame inner loop allocates **zero** new objects once the
  * circular buffer is filled. Per `Architecture §4.5`, the loop is
@@ -72,6 +76,9 @@ class RppgClient(
     private var hasPrev = false
     private var badStreak = 0
 
+    // CFrPPG Engine for spatial/spectral consensus telemetry (ECCV 2018)
+    private val cfrppgEngine = CfrppgEngine(windowSize, fs, fLo, fHi, NROI)
+
     // ---- Filter coefficients (set in init / reset) ------------------------
     private var hpB0 = 0f; private var hpB1 = 0f; private var hpB2 = 0f
     private var hpA1 = 0f; private var hpA2 = 0f
@@ -90,6 +97,17 @@ class RppgClient(
     @Volatile var quality: Float = 0f; private set
     @Volatile var decision: Int = DECISION_UNCERTAIN; private set
     @Volatile var latestPulse: Float = 0f; private set
+
+    // Multi-algorithm rPPG extensions (de Haan & Jeanne 2013 CHROM baseline)
+    @Volatile var chromHrBpm: Float = 0f; private set
+    @Volatile var chromSnr: Float = 0f; private set
+    @Volatile var methodAgreement: Float = 0f; private set
+    @Volatile var peakStrength: Float = 0f; private set
+    @Volatile var hrStability: Float = 0f; private set
+    private var prevHrBpm: Float = 0f
+
+    // CFrPPG Telemetry (ECCV 2018)
+    @Volatile var latestCfrppg: CfrppgSnapshot = CfrppgSnapshot.standby(); private set
 
     private var gEma = 0f
     private var bpX1 = 0f
@@ -116,6 +134,13 @@ class RppgClient(
         gEma = 0f
         bpX1 = 0f; bpX2 = 0f; bpY1 = 0f; bpY2 = 0f
         latestPulse = 0f
+        chromHrBpm = 0f
+        chromSnr = 0f
+        methodAgreement = 0f
+        peakStrength = 0f
+        hrStability = 0f
+        prevHrBpm = 0f
+        latestCfrppg = CfrppgSnapshot.standby()
 
         // Butterworth RBJ cookbook biquad coefficients.
         computeBiquad(fLo, fs, highpass = true).also {
@@ -200,6 +225,7 @@ class RppgClient(
         } else if (count < 45) {
             decision = DECISION_UNCERTAIN
             quality = (count.toFloat() / windowSize) * 0.5f
+            latestCfrppg = CfrppgSnapshot.unavailable("INSUFFICIENT_SAMPLES")
         }
     }
 
@@ -293,8 +319,96 @@ class RppgClient(
         val kL = if (kPeak - 1 >= kLo) kPeak - 1 else kPeak
         val kR = if (kPeak + 1 <= kHi) kPeak + 1 else kPeak
         val neigh = peak + 0.5f * (mag[kL] + mag[kR])
-        snr = if (total > 1e-9f) neigh / total else 0f
+        val posSnr = if (total > 1e-9f) neigh / total else 0f
         hrBpm = kPeak * (fs / windowSize) * 60f
+        peakStrength = if (total > 1e-9f) (peak / total).coerceIn(0.01f, 1.0f) else 0.01f
+
+        if (prevHrBpm > 0f && hrBpm > 0f) {
+            val hrDiff = kotlin.math.abs(hrBpm - prevHrBpm)
+            val stab = (1.0f - (hrDiff / 25.0f)).coerceIn(0.1f, 1.0f)
+            hrStability = if (hrStability == 0f) stab else 0.7f * hrStability + 0.3f * stab
+        } else if (hrBpm > 0f) {
+            hrStability = 0.85f
+        }
+        prevHrBpm = hrBpm
+
+        // ---- 2b. CHROM on ROI 0 (de Haan & Jeanne 2013) ----
+        var meanR0 = 0f; var meanG0 = 0f; var meanB0 = 0f
+        for (j in 0 until nSamples) {
+            val i = (head - nSamples + j + windowSize) and (windowSize - 1)
+            val o = i * NROI * NCH
+            meanR0 += rgb[o]; meanG0 += rgb[o + 1]; meanB0 += rgb[o + 2]
+        }
+        meanR0 /= nSamples; meanG0 /= nSamples; meanB0 /= nSamples
+        if (meanR0 < 1e-3f) meanR0 = 1e-3f
+        if (meanG0 < 1e-3f) meanG0 = 1e-3f
+        if (meanB0 < 1e-3f) meanB0 = 1e-3f
+
+        val xc = FloatArray(nSamples)
+        val yc = FloatArray(nSamples)
+        for (j in 0 until nSamples) {
+            val i = (head - nSamples + j + windowSize) and (windowSize - 1)
+            val o = i * NROI * NCH
+            val rn = rgb[o] / meanR0
+            val gn = rgb[o + 1] / meanG0
+            val bn = rgb[o + 2] / meanB0
+            xc[j] = 3f * rn - 2f * gn
+            yc[j] = 1.5f * rn + gn - 1.5f * bn
+        }
+        val tmpXc = FloatArray(nSamples)
+        val tmpYc = FloatArray(nSamples)
+        val filtXc = FloatArray(nSamples)
+        val filtYc = FloatArray(nSamples)
+        biquad(hpB0, hpB1, hpB2, hpA1, hpA2, xc, tmpXc)
+        biquad(lpB0, lpB1, lpB2, lpA1, lpA2, tmpXc, filtXc)
+        biquad(hpB0, hpB1, hpB2, hpA1, hpA2, yc, tmpYc)
+        biquad(lpB0, lpB1, lpB2, lpA1, lpA2, tmpYc, filtYc)
+
+        var sXc = 0f; var sYc = 0f
+        for (j in 0 until nSamples) {
+            sXc += filtXc[j] * filtXc[j]
+            sYc += filtYc[j] * filtYc[j]
+        }
+        sXc = sqrt(sXc / nSamples)
+        sYc = sqrt(sYc / nSamples)
+        val alphaChrom = if (sYc > 1e-9f) sXc / sYc else 1f
+        val chromPulse = FloatArray(nSamples)
+        for (j in 0 until nSamples) {
+            // Polarity alignment: Invert CHROM so positive excursions match POS pulse waveform
+            chromPulse[j] = -(filtXc[j] - alphaChrom * filtYc[j])
+        }
+
+        val reChrom = FloatArray(windowSize)
+        val imChrom = FloatArray(windowSize)
+        for (i in 0 until nSamples) {
+            val w = 0.5f * (1f - cos(2.0 * Math.PI * i / (nSamples - 1)).toFloat())
+            reChrom[i] = chromPulse[i] * w
+            imChrom[i] = 0f
+        }
+        fftRadix2InPlace(reChrom, imChrom)
+        var totalChrom = 0f
+        val magChrom = FloatArray(kHi + 1)
+        for (k in kLo..kHi) {
+            val p = reChrom[k] * reChrom[k] + imChrom[k] * imChrom[k]
+            magChrom[k] = p
+            totalChrom += p
+        }
+        var kPeakChrom = kLo
+        for (k in kLo + 1..kHi) if (magChrom[k] > magChrom[kPeakChrom]) kPeakChrom = k
+        chromHrBpm = kPeakChrom * (fs / windowSize) * 60f
+        val kLChrom = if (kPeakChrom - 1 >= kLo) kPeakChrom - 1 else kPeakChrom
+        val kRChrom = if (kPeakChrom + 1 <= kHi) kPeakChrom + 1 else kPeakChrom
+        val neighChrom = magChrom[kPeakChrom] + 0.5f * (magChrom[kLChrom] + magChrom[kRChrom])
+        chromSnr = if (totalChrom > 1e-9f) neighChrom / totalChrom else 0f
+
+        val posForehead = FloatArray(nSamples) { filt[it * NROI] }
+        methodAgreement = pearson(posForehead, chromPulse, nSamples).coerceIn(-1f, 1f)
+
+        snr = if (methodAgreement > 0.35f) {
+            0.6f * posSnr + 0.4f * chromSnr
+        } else {
+            posSnr * 0.75f
+        }
 
         // ---- 3. Cross-ROI temporal correlation ----
         val a0 = FloatArray(nSamples)
@@ -309,6 +423,9 @@ class RppgClient(
         val c02 = pearson(a0, a2, nSamples)
         val c12 = pearson(a1, a2, nSamples)
         roiCorr = (c01 + c02 + c12) / 3f
+
+        // ---- 3b. CFrPPG Correspondence Feature (ECCV 2018) ----
+        latestCfrppg = cfrppgEngine.computeFromFilteredRois(filt, nSamples, badStreak)
 
         // ---- 4. Quality + decision ----
         var q = 0.5f * snr * 4f + 0.5f * ((roiCorr + 1f) * 0.5f)

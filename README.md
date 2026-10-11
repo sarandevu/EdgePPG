@@ -1,11 +1,24 @@
 # EdgePPG — VKYC Assurance & Verification Gateway
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-10%2B%20(API%2029%2B)-green.svg)](android/)
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9%2B-purple.svg)](android/)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-yellow.svg)](verifier/)
+[![Target Hardware](https://img.shields.io/badge/Target-iQOO%2015%20%7C%20Snapdragon%208%20Elite-red.svg)](IMPLEMENTATION_PLAN.md)
+[![Tests](https://img.shields.io/badge/Unit%20Tests-44%20Passing-brightgreen.svg)](tests/)
 
-**EdgePPG** is an on-device Video KYC (VKYC) liveness assurance and cryptographic attestation engine. It combines real-time remote photoplethysmography (rPPG), active optical/behavioral challenges, camera sensor quality gating, and hardware-backed cryptographic signing (`AndroidKeyStore` SECP256R1) to provide tamper-evident verification receipts without transmitting raw biometric video to the cloud.
+**EdgePPG** is an on-device Video KYC (VKYC) liveness assurance, presentation attack detection (PAD), and hardware-backed cryptographic attestation system. It combines real-time physiological remote photoplethysmography (rPPG), active behavioral challenges, dynamic optical flash probing, and `AndroidKeyStore` SECP256R1 signatures to provide tamper-evident verification receipts without streaming raw biometric video to the cloud.
+
+---
+
+## 📚 Key Project Documentation
+
+* 🏛️ **[ARCHITECTURE.md](ARCHITECTURE.md)** — In-depth architectural blueprint, mathematical models (POS DSP, FFT, Pearson correlation), 28-feature schema, and enclave security.
+* 📋 **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)** — Master phase roadmap, test matrices, hardware validation on iQOO 15, and real-world illumination calibration log.
+* 📜 **[LICENSE](LICENSE)** — Apache License 2.0.
+* 🤝 **[CONTRIBUTING.md](CONTRIBUTING.md)** — Contribution guidelines, local development workflows, and testing expectations.
+* 🛡️ **[SECURITY.md](SECURITY.md)** — Threat model, security boundaries, zero-cloud privacy architecture, and vulnerability reporting.
+* 📝 **[CHANGELOG.md](CHANGELOG.md)** — Release history and recent updates.
 
 ---
 
@@ -31,58 +44,79 @@
    │  └────────────────────────────────────────────────────────┘                 │
    │                               │                                             │
    └───────────────────────────────┼─────────────────────────────────────────────┘
-                                   │ HTTP POST /api/result
+                                   │ HTTP POST /api/result & /api/live
                                    ▼
    ┌─────────────────────────────────────────────────────────────────────────────┐
    │                          PC VERIFIER & GATEWAY NODE                         │
-   │  - Cryptographic Signature & Nonce Verification                             │
+   │  - Cryptographic Signature & Nonce Verification (300s freshness window)     │
    │  - Real-Time Live Queue & Operator Console (Session / Call ID Routing)      │
    │  - 28-Feature Schema Compliance & Audit Ledger                              │
-   │  - Offline Tamper-Evident Verification Receipts                             │
+   │  - Offline Tamper-Evident SHA-256 Verification Receipts                     │
    └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## ⚡ Key Capabilities
+## ⚡ Key Capabilities & Scientific Foundations
 
 ### 1. Physiological rPPG Pulse Extraction
-- **Plane-Orthogonal-to-Skin (POS) Algorithm**: Extracts microvascular blood volume pulse (BVP) signals from facial skin ROIs (forehead, left/right cheeks).
-- **Dual-Band Spectral Analysis**: Radix-2 FFT and biquad Butterworth filtering isolate pulse harmonics between $0.75\,\text{Hz} - 3.5\,\text{Hz}$ ($45 - 210\,\text{BPM}$).
-- **Cross-ROI Phase Correlation**: Validates cross-region Pearson correlation ($r > 0.35$). Synthetic screens and printed photos exhibit zero microvascular phase sync, reliably triggering `SPOOF` detection.
+* **Plane-Orthogonal-to-Skin (POS)**: Isolates microvascular hemoglobin absorption pulses from temporal RGB averages across 3 facial ROIs (Forehead, Left Cheek, Right Cheek).
+* **Dual-Band Bandpass Filtering**: Biquad Butterworth filter tuned to $0.75\,\text{Hz} - 3.5\,\text{Hz}$ ($45 - 210\,\text{BPM}$).
+* **Radix-2 FFT Spectral SNR**: Extracts heart rate peak frequency and calculates pulsatile Signal-to-Noise Ratio (dB).
+* **Multi-ROI Cross-Correlation**: Validates physiological phase synchrony across separate skin regions ($r > 0.05 - 0.35$). Synthetic screens and printed photos lack genuine cross-ROI vascular pulse propagation.
 
-### 2. Active Behavioral & Optical Challenges
-- **Deterministic Challenge Generation**: Seed-derived pseudo-random sequences (Gaze shifts, Head tilts, Hand gestures, Stillness intervals).
-- **Temporal Reflection Analysis**: Measures facial reflectance modulation under controlled screen flash stimuli to detect digital projection surfaces.
+### 2. Active Behavioral Challenges
+* **Deterministic Pseudo-Random Generation**: Seed-derived unpredictable challenge sequences prevent pre-recorded video replays.
+* **Modalities**:
+  * Gaze Vector tracking (up/down/left/right).
+  * 3D Head Pose tracking via Euler angles (yaw/pitch/roll).
+  * Hand Gesture detection via MediaPipe (`RAISE_LEFT`, `RAISE_RIGHT`, `OPEN_PALM`, `THUMBS_UP`).
+  * Micro-motion stillness verification.
 
-### 3. Hardware-Enclave Integrity
-- **On-Device Cryptographic Attestation**: Verification transcripts are canonicalized and signed inside the `AndroidKeyStore` using NIST P-256 (`SHA256withECDSA`).
-- **Replay Protection**: Nonce-bound 5-minute freshness window prevents recording replays and man-in-the-middle tampering.
+### 3. Active Optical Stimulus & Ambient Light Calibration
+* **Screen Flash Probe**: Emits millisecond color flashes to verify temporal reflectance modulation on human skin vs digital display panels.
+* **Illumination Resilience**: In brightly lit environments where natural sunlight washes out flash contrast, the engine designates the trial as `CONTAMINATED` (inconclusive lighting condition) rather than flagging the user as `WRONG` (presentation attack), preventing genuine applicants in good lighting from false rejections.
 
-### 4. Zero-Cloud Privacy Model
-- Raw video frames never leave the device. Only canonicalized telemetry and cryptographic signatures are transmitted over local Wi-Fi or QR fallback.
+### 4. Hardware-Enclave Attestation
+* **AndroidKeyStore Signing**: Hardware-backed NIST P-256 (`SHA256withECDSA`) signing of canonical verification transcripts.
+* **Nonce Freshness**: Cryptographic nonces bound to 300-second freshness windows guarantee replay immunity.
+
+### 5. Zero-Cloud Privacy Guarantee
+* Raw video frames and facial biometric data never leave device memory. Only canonicalized feature vectors and cryptographic signatures are transmitted over local Wi-Fi or QR fallback.
+
+---
+
+## 🎨 Visual Design System
+
+The application features a modern, professional, financial-grade user experience:
+* **Color Palette**: Dominant clean white surfaces (`#FFFFFF`) with subtle soft-blue cards (`#EAF5FF`, `#CFE5FA`) and vivid brand accents (`#77BFFF`).
+* **Face Mesh ROI Overlay**:
+  * Forehead: Vibrant Cyan (`#22D3EE`)
+  * Left Cheek: Emerald Green (`#34D399`)
+  * Right Cheek: Tangerine Orange (`#FB923C`)
+* **Live Cardiac Canvas**: Real-time oscillatory waveform rendering microvascular pulse waves dynamically at 30+ FPS.
 
 ---
 
 ## 🚀 Quick Start Guide
 
 ### Prerequisites
-- **Android Device**: Android 10+ (API 29+) with front camera.
-- **Development Workstation**: Windows, macOS, or Linux with Python 3.10+ and JDK 17+.
+* **Android Device**: Android 10+ (API 29+), tested and calibrated on **iQOO 15** (Qualcomm Snapdragon 8 Elite).
+* **Development Machine**: Windows 11 / Linux / macOS with Python 3.10+ and JDK 17+.
 
 ---
 
 ### Step 1: Start the PC Verifier Gateway
 
 ```powershell
-# In the repository root:
+# In repository root:
 .\.venv\Scripts\python.exe -m verifier.server --port 8080
 ```
-Open **`http://localhost:8080/`** in your web browser to view the Verification Dashboard.
+Open **`http://localhost:8080/`** (or your machine's Wi-Fi IP e.g. `http://192.168.112.130:8080/`) to view the Verification Operator Dashboard.
 
 ---
 
-### Step 2: Build & Install the Android Application
+### Step 2: Build & Install Android Application
 
 ```powershell
 cd android
@@ -94,70 +128,76 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ### Step 3: Run Live Verification
 
-1. **On the PC Dashboard**:
-   - Tap **⚡ Autofill Sample** (populates Session `001`, Applicant `User 1`, Reference `User1`).
-   - Click **+ Schedule Session**.
-2. **On the Mobile App**:
-   - Verify defaults are set to Applicant `User1` and Session `001`.
-   - Tap **`START / JOIN VERIFICATION ➔`**.
-   - Align face in preview. Complete active prompts (gaze/head movement).
-   - Once completed, the phone displays **VERIFIED LIVE APPLICANT** (or **SYNTHETIC SPOOF DETECTED** if presenting a screen/photo).
-   - The PC Dashboard updates in real time with the verified cryptographic receipt.
+1. **On the PC Operator Dashboard**:
+   * Click **⚡ Autofill Sample** (schedules Applicant `User 1`, Session `001`).
+   * Click **+ Schedule Session**.
+2. **On the Mobile Device**:
+   * Open **EdgePPG VKYC**.
+   * Tap **`START / JOIN VERIFICATION ➔`**.
+   * Align your face in the camera preview frame.
+   * Follow the prompt challenges (e.g. gaze shift, head tilt, stillness).
+   * Upon completion, the screen confirms **VERIFIED LIVE APPLICANT** and streams the signed envelope to the PC gateway.
+   * The PC dashboard writes an immutable receipt to `verifier/receipts/`.
 
 ---
 
 ## 🧪 Automated Attack Test Harness
 
-The PC Verifier includes an integrated Security Test Harness simulating physical and digital presentation attacks:
+The PC Verifier features a built-in automated test suite that simulates adversarial presentation attacks:
 
 ```powershell
-# Run the test suite:
 .\.venv\Scripts\python.exe -m unittest discover verifier/tests
 ```
 
-Available Scenarios in Dashboard Test Lab:
-- **Genuine Live Subject**: Valid rPPG pulse ($SNR \ge 0.42$, $ROI \ge 0.52$), passes all gates $\rightarrow$ `LIVE`.
-- **Printed Photo Attack**: Static reflection ($SNR = 0.04$, $ROI = 0.02$), no pulse $\rightarrow$ `SPOOF`.
-- **Screen Video Replay**: Display flicker ($SNR = 0.08$, $ROI = 0.06$) $\rightarrow$ `SPOOF`.
-- **Signature Tampering**: Corrupted envelope signature $\rightarrow$ `INVALID`.
-- **Nonce Replay**: Replayed session nonce past freshness window $\rightarrow$ `REPLAY REJECTED`.
+Evaluated Attack Vectors:
+* **Genuine Live Subject**: Valid rPPG pulse ($SNR \ge 0.42$, $ROI \ge 0.52$), passes all gates $\rightarrow$ `LIVE`.
+* **Printed Photo Attack**: Static reflection ($SNR = 0.04$, $ROI = 0.02$), no pulse $\rightarrow$ `SPOOF`.
+* **Screen Video Replay**: Display flicker ($SNR = 0.08$, $ROI = 0.06$) $\rightarrow$ `SPOOF`.
+* **Signature Tampering**: Corrupted envelope signature $\rightarrow$ `INVALID`.
+* **Nonce Replay**: Replayed historic session nonce past 300s window $\rightarrow$ `REPLAY REJECTED`.
 
 ---
 
-## 📁 Repository Structure
+## 📁 Repository Directory Structure
 
 ```
 EdgePPG/
-├── android/                   # Android native application (Kotlin)
+├── android/                         # Android native project (Kotlin)
 │   └── app/src/main/kotlin/com/edgeppg/app/
-│       ├── behavior/          # Gaze, head pose, and hand gesture estimators
-│       ├── capture/           # CameraX session, AE/AWB lock, face ROI tracker
-│       ├── challenge/         # Deterministic challenge engine & state machine
-│       ├── features/          # 28-feature schema & row assembler
-│       ├── gates/             # DecisionEngine & threshold evaluator
-│       ├── integrity/         # AndroidKeyStore ECDSA signer & transcript builder
-│       ├── optical/           # Screen flash challenge overlay
-│       ├── quality/           # Exposure, AWB, motion contamination gates
-│       ├── rppg/              # POS DSP, biquad bandpass filter, FFT
-│       ├── session/           # SessionController & CallController
-│       └── transport/         # Local Wi-Fi & QR code fallback transport
-├── verifier/                  # Python PC verifier gateway node
-│   ├── calls.py               # Session scheduling & join handling
-│   ├── canonical.py           # Canonical JSON serialization
-│   ├── receipt.py             # Tamper-evident receipt generator
-│   ├── server.py              # HTTP dashboard & verification gateway
-│   ├── test_harness.py        # Automated attack scenario engine
-│   └── verify.py              # ECDSA signature & freshness validator
-├── models/                    # ML model manifests and calibration metadata
-├── docs/                      # Technical specifications & architecture blueprints
-└── requirements.txt           # Python dependencies
+│       ├── acoustic/                # Ultrasonic Doppler distance estimator
+│       ├── behavior/                # Gaze, head pose, and hand gesture solvers
+│       ├── capture/                 # CameraX session, 3A lock, phone screen detector
+│       ├── challenge/               # Deterministic challenge sequence engine
+│       ├── document/                # ID document OCR and framing assist
+│       ├── features/                # 28-feature canonical vector assembler & native ML
+│       ├── gates/                   # DecisionEngine & threshold evaluator
+│       ├── integrity/               # AndroidKeyStore ECDSA signer & transcript builder
+│       ├── optical/                 # Screen flash challenge stimulus & analyzer
+│       ├── quality/                 # Exposure, AWB, and motion contamination gates
+│       ├── rppg/                    # Pure Kotlin POS DSP, biquad filter, FFT SNR
+│       ├── session/                 # SessionController & CallController
+│       └── transport/               # Local Wi-Fi transport & QR code fallback
+├── verifier/                        # Python PC verifier gateway node
+│   ├── calls.py                     # Session scheduling & join handling
+│   ├── canonical.py                 # Canonical JSON serialization
+│   ├── receipt.py                   # Tamper-evident receipt generator
+│   ├── server.py                    # HTTP dashboard & verification gateway
+│   ├── test_harness.py              # Automated attack scenario engine
+│   └── verify.py                    # ECDSA signature & freshness validator
+├── models/                          # ML models (Random Forest, XGBoost, MediaPipe)
+├── docs/                            # Research blueprints, audits, and guides
+├── tests/                           # Python parity and end-to-end test suite
+├── ARCHITECTURE.md                  # Comprehensive system & runtime architecture
+├── IMPLEMENTATION_PLAN.md           # Implementation roadmap & validation log
+├── CHANGELOG.md                     # Version history & release notes
+├── CONTRIBUTING.md                  # Developer workflow & PR guidelines
+├── SECURITY.md                      # Security policy & threat model
+├── LICENSE                          # Apache License 2.0
+└── requirements.txt                 # Python dependencies
 ```
 
 ---
 
-## 📜 Compliance & Security Notice
+## 📜 License
 
-EdgePPG enforces strict claim discipline:
-- Cryptographic signatures guarantee authenticity and freshness of the decision transcript.
-- Spoof detection relies on physiological pulse dynamics and multi-cue consistency.
-- No raw biometric identifiers or video recordings are stored or transmitted.
+Licensed under the **Apache License, Version 2.0**. See [LICENSE](LICENSE) for details.

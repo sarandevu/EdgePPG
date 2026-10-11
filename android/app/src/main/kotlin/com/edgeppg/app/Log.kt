@@ -18,68 +18,90 @@ package com.edgeppg.app
 object Log {
     private const val APP_TAG = "EdgePPG"
 
+    private inline fun safeLog(block: () -> Unit) {
+        try {
+            block()
+        } catch (_: RuntimeException) {
+            // Ignored in JVM unit test environments where android.util.Log is unmocked
+        }
+    }
+
     fun tag(area: String): String = "$APP_TAG/$area"
 
     /** Stage / component bring-up messages. Dev-only. */
     fun stage(stage: String, msg: String) {
         if (BuildConfig.EDGEPPG_DEV_MODE) {
-            android.util.Log.i(tag("stage"), "[$stage] $msg")
+            safeLog { android.util.Log.i(tag("stage"), "[$stage] $msg") }
         }
     }
 
     /** Camera / capture pipeline messages. Dev-only. */
     fun capture(msg: String) {
         if (BuildConfig.EDGEPPG_DEV_MODE) {
-            android.util.Log.i(tag("capture"), msg)
+            safeLog { android.util.Log.i(tag("capture"), msg) }
         }
     }
 
     /** Frame quality gate messages. Dev-only. */
     fun quality(msg: String) {
         if (BuildConfig.EDGEPPG_DEV_MODE) {
-            android.util.Log.i(tag("quality"), msg)
+            safeLog { android.util.Log.i(tag("quality"), msg) }
         }
     }
 
     /** rPPG DSP messages. Dev-only. */
     fun rppg(msg: String) {
         if (BuildConfig.EDGEPPG_DEV_MODE) {
-            android.util.Log.i(tag("rppg"), msg)
+            safeLog { android.util.Log.i(tag("rppg"), msg) }
         }
     }
 
     /** Behavioral / challenge messages. Dev-only. */
     fun behavior(msg: String) {
         if (BuildConfig.EDGEPPG_DEV_MODE) {
-            android.util.Log.i(tag("behavior"), msg)
+            safeLog { android.util.Log.i(tag("behavior"), msg) }
         }
     }
 
     /** Multi-person tracking. Dev-only. */
     fun multi(msg: String) {
         if (BuildConfig.EDGEPPG_DEV_MODE) {
-            android.util.Log.i(tag("multi"), msg)
+            safeLog { android.util.Log.i(tag("multi"), msg) }
         }
     }
 
     /** Decision engine / gates. Dev-only. */
     fun gate(msg: String) {
         if (BuildConfig.EDGEPPG_DEV_MODE) {
-            android.util.Log.i(tag("gate"), msg)
+            safeLog { android.util.Log.i(tag("gate"), msg) }
         }
     }
 
     /** Integrity / Keystore / transcript signing. Always surface (dev-only). */
     fun integrity(msg: String) {
         if (BuildConfig.EDGEPPG_DEV_MODE) {
-            android.util.Log.i(tag("integrity"), msg)
+            safeLog { android.util.Log.i(tag("integrity"), msg) }
         }
     }
 
     /** Transport (Wi-Fi / QR). Dev-only. */
     fun transport(msg: String) {
         if (BuildConfig.EDGEPPG_DEV_MODE) {
-            android.util.Log.i(tag("transport"), msg)
+            safeLog { android.util.Log.i(tag("transport"), msg) }
+        }
+    }
+
+    /** Acoustic sensing / FMCW radar messages. Dev-only. */
+    fun acoustic(msg: String) {
+        if (BuildConfig.EDGEPPG_DEV_MODE) {
+            safeLog { android.util.Log.i(tag("acoustic"), msg) }
+        }
+    }
+
+    /** Non-fatal warnings. Dev-only. */
+    fun warn(area: String, msg: String) {
+        if (BuildConfig.EDGEPPG_DEV_MODE) {
+            safeLog { android.util.Log.w(tag(area), msg) }
         }
     }
 
@@ -90,6 +112,8 @@ object Log {
      */
     fun error(area: String, msg: String, t: Throwable? = null) {
         val tag = tag(area)
-        if (t != null) android.util.Log.e(tag, msg, t) else android.util.Log.e(tag, msg)
+        safeLog {
+            if (t != null) android.util.Log.e(tag, msg, t) else android.util.Log.e(tag, msg)
+        }
     }
 }

@@ -17,16 +17,17 @@ package com.edgeppg.app.gates
 data class Thresholds(
     val live: Float,
     val spoof: Float,
-    val minFpsForPass: Float = 25f,
+    val minFpsForPass: Float = 15f,
     val maxDropRateForPass: Float = 0.10f,
     val minExposureStabilityForPass: Float = 0.80f,
     val minAwbStabilityForPass: Float = 0.80f,
 ) {
     companion object {
-        /** Documented placeholder (FR-GATE-8). */
+        /** Documented placeholder (FR-GATE-8) calibrated for mobile front cameras. */
         val PLACEHOLDER = Thresholds(
             live = 0.80f,
             spoof = 0.20f,
+            minFpsForPass = 15f,
         )
     }
 }

@@ -38,42 +38,43 @@ class RppgGraphView @JvmOverloads constructor(
     private var isFlatline = true
     private var sampleCount = 0
 
-    // Drawing resources
+    // Drawing resources: Clean White & Light-Blue Palette
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF0C1322.toInt()
+        color = 0xFFFFFFFF.toInt() // White primary surface
         style = Paint.Style.FILL
     }
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF1E2D4A.toInt()
+        color = 0xFFCFE5FA.toInt() // Soft blue border
         style = Paint.Style.STROKE
         strokeWidth = dp(1f)
     }
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF162238.toInt()
+        color = 0xFFE2EEF9.toInt() // Subtle soft-blue gridline
         style = Paint.Style.STROKE
         strokeWidth = dp(1f)
     }
     private val wavePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF0284C7.toInt() // Crisp medical pulse blue
         style = Paint.Style.STROKE
-        strokeWidth = dp(2.5f)
+        strokeWidth = dp(2.2f)
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = 0xFF34D399.toInt()
+        color = 0xFF0284C7.toInt()
     }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF94A3B8.toInt()
+        color = 0xFF475569.toInt() // Readable muted neutral
         textSize = dp(10f)
     }
     private val statusPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFFEF4444.toInt()
+        color = 0xFF64748B.toInt()
         textSize = dp(10f)
         textAlign = Paint.Align.CENTER
     }
     private val flatPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF475569.toInt()
+        color = 0xFF94A3B8.toInt()
         style = Paint.Style.STROKE
         strokeWidth = dp(1.5f)
     }
@@ -112,13 +113,8 @@ class RppgGraphView @JvmOverloads constructor(
         lastWidth = w
         lastHeight = h
         bgRect.set(dp(1f), dp(1f), w - dp(1f), h - dp(1f))
-        currentGradient = LinearGradient(
-            0f, 0f, w.toFloat(), 0f,
-            intArrayOf(0xFF06B6D4.toInt(), 0xFF10B981.toInt(), 0xFF34D399.toInt()),
-            null,
-            Shader.TileMode.CLAMP
-        )
-        wavePaint.shader = currentGradient
+        wavePaint.color = 0xFF0284C7.toInt()
+        wavePaint.shader = null
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -140,10 +136,10 @@ class RppgGraphView @JvmOverloads constructor(
         canvas.drawText("PULSE WAVE (rPPG)", dp(12f), dp(16f), textPaint)
 
         if (isFlatline || sampleCount < 5) {
-            // Draw flatline in red/gray
+            // Draw flatline in muted neutral
             canvas.drawLine(dp(12f), midY, w - dp(12f), midY, flatPaint)
-            statusPaint.color = 0xFFF87171.toInt()
-            canvas.drawText("NO FACE DETECTED • ALIGN FACE IN FRAME", w / 2f, midY - dp(6f), statusPaint)
+            statusPaint.color = 0xFF64748B.toInt()
+            canvas.drawText("AWAITING CARDIAC PULSE • ALIGN FACE IN FRAME", w / 2f, midY - dp(6f), statusPaint)
             return
         }
 

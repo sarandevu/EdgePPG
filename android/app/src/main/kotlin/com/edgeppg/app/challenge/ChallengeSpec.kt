@@ -26,21 +26,21 @@ sealed class ChallengeSpec {
     data class Gaze(
         val direction: GazeDirection,
         override val subject: ChallengingSubject,
-        override val timeoutMs: Long = 7_000L,
+        override val timeoutMs: Long = 8_000L,
     ) : ChallengeSpec()
 
     /** Turn or tilt the head to a specific orientation. */
     data class Head(
         val orientation: HeadOrientation,
         override val subject: ChallengingSubject,
-        override val timeoutMs: Long = 7_000L,
+        override val timeoutMs: Long = 8_000L,
     ) : ChallengeSpec()
 
     /** Raise a specific hand or perform a simple gesture. */
     data class Hand(
         val gesture: HandGesture,
         override val subject: ChallengingSubject,
-        override val timeoutMs: Long = 7_000L,
+        override val timeoutMs: Long = 10_000L,
     ) : ChallengeSpec()
 
     /** Hold still for the duration (motion-contamination detector). */

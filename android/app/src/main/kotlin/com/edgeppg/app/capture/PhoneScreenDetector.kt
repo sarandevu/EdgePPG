@@ -1,7 +1,9 @@
 package com.edgeppg.app.capture
 
+import android.graphics.Bitmap
 import android.graphics.Rect
 import android.media.Image
+import androidx.camera.core.ImageProxy
 import com.edgeppg.app.Log
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
@@ -37,11 +39,11 @@ import kotlin.math.min
  * routing in [SessionController] and [DecisionEngine].
  */
 class PhoneScreenDetector(
-    private val labelConfidenceThreshold: Float = 0.40f,
-    private val minConsecutiveDetections: Int = 2,
+    private val labelConfidenceThreshold: Float = 0.75f,
+    private val minConsecutiveDetections: Int = 7,
     private val labeler: ImageLabeler = ImageLabeling.getClient(
         ImageLabelerOptions.Builder()
-            .setConfidenceThreshold(0.35f)
+            .setConfidenceThreshold(0.45f)
             .build()
     ),
 ) {
@@ -56,117 +58,186 @@ class PhoneScreenDetector(
     )
 
     companion object {
-        // Keywords indicating a mobile phone, tablet, screen, or electronic presentation device
+        // Specific keywords indicating actual secondary mobile phone screens
         private val PHONE_KEYWORDS = setOf(
-            "phone", "mobile phone", "cell phone", "cellphone", "smartphone",
-            "telephone", "screen", "display device", "computer monitor",
-            "display", "monitor", "television", "tablet computer", "tablet",
-            "gadget", "handheld device", "electronic device", "electronics",
-            "multimedia", "cellular phone"
+            "mobile phone", "cell phone", "cellphone", "smartphone",
+            "tablet computer", "cellular phone"
+        )
+
+        // Keywords indicating documents, paper, or identity cards that should suppress false spoof alarms
+        private val DOCUMENT_KEYWORDS = setOf(
+            "document", "identity document", "paper", "card", "business card",
+            "passport", "credit card", "id card", "badge"
         )
     }
 
     private val isRunningLabeler = AtomicBoolean(false)
     private var consecutiveDetections = 0
     private var consecutiveCleanFrames = 0
+    private var consecutiveLabelHits = 0
+    private var phoneLatchUntilMs = 0L
     @Volatile var isPhoneDetected: Boolean = false
         private set
     @Volatile var lastReason: String = ""
         private set
+    @Volatile var lastDetectedLabels: List<String> = emptyList()
+        private set
+    @Volatile var isDocumentModeActive: Boolean = false
+
+    /** Temporarily suppress phone screen detections when a valid KYC document or card is verified. */
+    fun suppressForDocument(durationMs: Long = 4000L) {
+        phoneLatchUntilMs = 0L
+        isPhoneDetected = false
+        lastReason = ""
+        consecutiveDetections = 0
+        consecutiveLabelHits = 0
+    }
 
     /** Reset state for a fresh VKYC session. */
     fun reset() {
         consecutiveDetections = 0
         consecutiveCleanFrames = 0
+        consecutiveLabelHits = 0
+        phoneLatchUntilMs = 0L
         isPhoneDetected = false
         lastReason = ""
+        lastDetectedLabels = emptyList()
+        isDocumentModeActive = false
     }
 
     /**
      * Inspect frame for secondary phone / screen presentation attacks.
-     *
-     * @param image Raw YUV camera image
-     * @param rotationDegrees Sensor rotation
-     * @param meshPoints 468 3D landmark points [x0, y0, z0, ...] from ML Kit FaceMesh
-     * @param faceBox Bounding box of primary face, if any
+     * Decouples bitmap for async ML Kit labeling so CameraX ImageProxy can close immediately.
      */
     fun processFrame(
-        image: Image,
-        rotationDegrees: Int,
+        imageProxy: ImageProxy,
         meshPoints: FloatArray,
         faceBox: Rect?,
     ): Result {
+        if (isDocumentModeActive) {
+            isPhoneDetected = false
+            return Result(
+                isPhoneDetected = false,
+                reason = "document-mode-active",
+                confidence = 0f,
+                detectedLabels = lastDetectedLabels
+            )
+        }
+
+        val image = imageProxy.image ?: return Result(
+            isPhoneDetected = isPhoneDetected,
+            reason = lastReason,
+            confidence = 0f,
+            detectedLabels = lastDetectedLabels
+        )
+        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+
         var detectedByThisFrame = false
         var primaryReason = ""
         var maxConfidence = 0f
 
-        // --- Layer 1: 3D Facial Mesh Depth Planarity Check ---
-        val planarityScore = evaluateMeshPlanarity(meshPoints)
-        if (planarityScore > 0.70f) {
-            detectedByThisFrame = true
-            primaryReason = "planar-mesh-collapse:score=${"%.2f".format(planarityScore)}"
-            maxConfidence = max(maxConfidence, planarityScore)
-        }
+        // Check if hand is currently present or actively tracked in frame
+        val handSnap = com.edgeppg.app.behavior.GestureTracker.getLatestSnapshot()
+        val isHandPresent = handSnap.isHandPresent || (System.currentTimeMillis() - handSnap.timestampMs < 2500L)
 
-        // --- Layer 2: Phone Bezel & Screen Edge Contour Check ---
-        val bezelScore = if (faceBox != null && !faceBox.isEmpty) {
-            evaluateScreenBezelEdges(image, faceBox)
+        // --- Layer 1 & 2: Multi-Cue Screen Replay Verification ---
+        // A true screen presentation attack exhibits BOTH extreme depth planarity collapse
+        // AND rectangular screen bezel boundaries enclosing the face. An isolated planar
+        // reading or background room line must NEVER falsely trigger a spoof verdict.
+        val planarityScore = if (!isHandPresent) evaluateMeshPlanarity(meshPoints) else 0f
+        val bezelScore = if (!isHandPresent && faceBox != null && !faceBox.isEmpty && planarityScore >= 0.50f) {
+            evaluateScreenBezelEdges(image, faceBox, rotationDegrees)
         } else 0f
-        if (bezelScore > 0.65f) {
+
+        if (planarityScore >= 0.85f && bezelScore >= 0.65f) {
             detectedByThisFrame = true
-            val r = "screen-bezel-detected:score=${"%.2f".format(bezelScore)}"
-            primaryReason = if (primaryReason.isEmpty()) r else "$primaryReason|$r"
-            maxConfidence = max(maxConfidence, bezelScore)
+            primaryReason = "screen-replay-detected:planarity=${"%.2f".format(planarityScore)}|bezel=${"%.2f".format(bezelScore)}"
+            maxConfidence = max(planarityScore, bezelScore)
         }
 
         // --- Layer 3: ML Kit Image Labeling / Electronic Device Recognition ---
-        val labelsFound = mutableListOf<String>()
-        if (!isRunningLabeler.get()) {
-            if (isRunningLabeler.compareAndSet(false, true)) {
-                try {
-                    val input = InputImage.fromMediaImage(image, rotationDegrees)
-                    val task = labeler.process(input)
-                    val labels: List<ImageLabel>? = try {
-                        Tasks.await(task, 250, TimeUnit.MILLISECONDS)
-                    } catch (_: Exception) {
-                        null
-                    }
-                    if (labels != null) {
+        if (isRunningLabeler.compareAndSet(false, true)) {
+            try {
+                val bmp = imageProxy.toBitmap()
+                val isRot = (rotationDegrees == 90 || rotationDegrees == 270)
+                val targetW = if (isRot) 240 else 320
+                val targetH = if (isRot) 320 else 240
+                val scaledBmp = Bitmap.createScaledBitmap(bmp, targetW, targetH, true)
+                if (scaledBmp != bmp) {
+                    bmp.recycle()
+                }
+                val input = InputImage.fromBitmap(scaledBmp, rotationDegrees)
+                labeler.process(input)
+                    .addOnSuccessListener { labels ->
+                        val found = mutableListOf<String>()
+                        var hasDocumentLabel = false
                         for (lbl in labels) {
                             val text = lbl.text.lowercase().trim()
-                            labelsFound.add("${lbl.text}:${"%.2f".format(lbl.confidence)}")
-                            val isMatch = PHONE_KEYWORDS.any { kw ->
-                                text == kw || text.contains(kw)
-                            }
-                            if (isMatch && lbl.confidence >= labelConfidenceThreshold) {
-                                detectedByThisFrame = true
-                                val r = "device-label:${lbl.text}(${"%.2f".format(lbl.confidence)})"
-                                primaryReason = if (primaryReason.isEmpty()) r else "$primaryReason|$r"
-                                maxConfidence = max(maxConfidence, lbl.confidence)
+                            found.add("${lbl.text}:${"%.2f".format(lbl.confidence)}")
+                            if (DOCUMENT_KEYWORDS.any { dw -> text == dw || text.contains(dw) }) {
+                                hasDocumentLabel = true
                             }
                         }
+                        if (!hasDocumentLabel && !isHandPresent) {
+                            var matchedKeyword = false
+                            var matchedConf = 0f
+                            var matchedText = ""
+                            for (lbl in labels) {
+                                val text = lbl.text.lowercase().trim()
+                                val isMatch = PHONE_KEYWORDS.any { kw ->
+                                    text == kw || text.contains(kw)
+                                }
+                                if (isMatch && lbl.confidence >= labelConfidenceThreshold) {
+                                    matchedKeyword = true
+                                    matchedConf = lbl.confidence
+                                    matchedText = lbl.text
+                                }
+                            }
+                            if (matchedKeyword) {
+                                consecutiveLabelHits++
+                                if (consecutiveLabelHits >= 2) {
+                                    isPhoneDetected = true
+                                    lastReason = "device-label:$matchedText(${"%.2f".format(matchedConf)})"
+                                    phoneLatchUntilMs = System.currentTimeMillis() + 2500L
+                                }
+                            } else {
+                                consecutiveLabelHits = 0
+                            }
+                        } else {
+                            consecutiveLabelHits = 0
+                        }
+                        lastDetectedLabels = found
                     }
-                } catch (t: Throwable) {
-                    Log.error("detector", "PhoneScreenDetector labeling failed", t)
-                } finally {
-                    isRunningLabeler.set(false)
-                }
+                    .addOnFailureListener { t ->
+                        Log.error("detector", "PhoneScreenDetector labeling failed", t)
+                    }
+                    .addOnCompleteListener {
+                        try { scaledBmp.recycle() } catch (_: Throwable) {}
+                        isRunningLabeler.set(false)
+                    }
+            } catch (t: Throwable) {
+                Log.error("detector", "PhoneScreenDetector labeling input failed", t)
+                isRunningLabeler.set(false)
             }
         }
 
-        if (detectedByThisFrame) {
+        val now = System.currentTimeMillis()
+        if (now < phoneLatchUntilMs) {
+            isPhoneDetected = true
+        } else if (detectedByThisFrame) {
             consecutiveCleanFrames = 0
-            consecutiveDetections = (consecutiveDetections + 1).coerceAtMost(5)
-            if (consecutiveDetections >= minConsecutiveDetections || maxConfidence >= 0.85f) {
+            consecutiveDetections = (consecutiveDetections + 1).coerceAtMost(6)
+            if (consecutiveDetections >= minConsecutiveDetections) {
                 isPhoneDetected = true
                 lastReason = primaryReason
             }
         } else {
             consecutiveCleanFrames++
-            if (consecutiveCleanFrames >= 2) {
+            if (consecutiveCleanFrames >= 6) {
                 consecutiveDetections = 0
                 isPhoneDetected = false
                 lastReason = ""
+                phoneLatchUntilMs = 0L
             }
         }
 
@@ -176,7 +247,72 @@ class PhoneScreenDetector(
             confidence = if (isPhoneDetected) maxConfidence else 0f,
             planarityScore = planarityScore,
             bezelScore = bezelScore,
-            detectedLabels = labelsFound,
+            detectedLabels = lastDetectedLabels,
+        )
+    }
+
+    fun processFrame(
+        image: Image,
+        rotationDegrees: Int,
+        meshPoints: FloatArray,
+        faceBox: Rect?,
+    ): Result {
+        if (isDocumentModeActive) {
+            isPhoneDetected = false
+            return Result(
+                isPhoneDetected = false,
+                reason = "document-mode-active",
+                confidence = 0f,
+                detectedLabels = lastDetectedLabels
+            )
+        }
+
+        var detectedByThisFrame = false
+        var primaryReason = ""
+        var maxConfidence = 0f
+
+        // Check if hand is currently present or actively tracked in frame
+        val handSnap = com.edgeppg.app.behavior.GestureTracker.getLatestSnapshot()
+        val isHandPresent = handSnap.isHandPresent && (System.currentTimeMillis() - handSnap.timestampMs < 1500L)
+
+        val planarityScore = if (!isHandPresent) evaluateMeshPlanarity(meshPoints) else 0f
+        val bezelScore = if (!isHandPresent && faceBox != null && !faceBox.isEmpty && planarityScore >= 0.50f) {
+            evaluateScreenBezelEdges(image, faceBox, rotationDegrees)
+        } else 0f
+
+        if (planarityScore >= 0.85f && bezelScore >= 0.65f) {
+            detectedByThisFrame = true
+            primaryReason = "screen-replay-detected:planarity=${"%.2f".format(planarityScore)}|bezel=${"%.2f".format(bezelScore)}"
+            maxConfidence = max(planarityScore, bezelScore)
+        }
+
+        val now = System.currentTimeMillis()
+        if (now < phoneLatchUntilMs) {
+            isPhoneDetected = true
+        } else if (detectedByThisFrame) {
+            consecutiveCleanFrames = 0
+            consecutiveDetections = (consecutiveDetections + 1).coerceAtMost(6)
+            if (consecutiveDetections >= minConsecutiveDetections) {
+                isPhoneDetected = true
+                lastReason = primaryReason
+            }
+        } else {
+            consecutiveCleanFrames++
+            if (consecutiveCleanFrames >= 6) {
+                consecutiveDetections = 0
+                isPhoneDetected = false
+                lastReason = ""
+                phoneLatchUntilMs = 0L
+            }
+        }
+
+        return Result(
+            isPhoneDetected = isPhoneDetected,
+            reason = if (isPhoneDetected) lastReason else "",
+            confidence = if (isPhoneDetected) maxConfidence else 0f,
+            planarityScore = planarityScore,
+            bezelScore = bezelScore,
+            detectedLabels = lastDetectedLabels,
         )
     }
 
@@ -215,13 +351,14 @@ class PhoneScreenDetector(
         val depthRelief = abs(noseTip[2] - baseZ)
         val normalizedRelief = depthRelief / faceWidth
 
-        // In a real human face, normalizedRelief is typically 0.12 to 0.35.
-        // On a flat phone screen or paper photo, normalizedRelief collapses towards 0.0.
+        // Monocular Z relief from ML Kit Face Mesh:
+        // A true flat 2D screen or paper print has virtually zero depth variance (normalizedRelief < 0.012).
+        // A natural living face exhibits organic nose projection (normalizedRelief >= 0.025).
         return when {
-            normalizedRelief < 0.045f -> 0.95f // Extremely flat -> Screen / Paper
-            normalizedRelief < 0.075f -> 0.75f // Highly planar -> Probable screen replay
-            normalizedRelief < 0.100f -> 0.45f // Borderline
-            else -> 0.0f                      // Natural 3D relief
+            normalizedRelief < 0.012f -> 0.95f // Completely flat 2D plane -> Screen / Paper
+            normalizedRelief < 0.020f -> 0.60f // Low depth variance
+            normalizedRelief < 0.030f -> 0.30f // Slight flattening
+            else -> 0.0f                      // Confirmed natural 3D relief
         }
     }
 
@@ -229,7 +366,7 @@ class PhoneScreenDetector(
      * Inspect concentric margin outside face bounding box for straight rectangular
      * high-contrast edges (phone chassis / screen bezel).
      */
-    private fun evaluateScreenBezelEdges(image: Image, box: Rect): Float {
+    private fun evaluateScreenBezelEdges(image: Image, box: Rect, rotationDegrees: Int): Float {
         val planes = image.planes
         if (planes.isEmpty()) return 0f
         val yBuf = planes[0].buffer
@@ -241,56 +378,80 @@ class PhoneScreenDetector(
         val bh = box.height()
         if (bw < 50 || bh < 50) return 0f
 
-        // Bezel check zones: 12% to 35% margin to the left and right of face box
-        val leftBezelX = (box.left - (bw * 0.25f).toInt()).coerceIn(4, imgW - 8)
-        val rightBezelX = (box.right + (bw * 0.25f).toInt()).coerceIn(4, imgW - 8)
-        val topBezelY = (box.top - (bh * 0.20f).toInt()).coerceIn(4, imgH - 8)
-        val bottomBezelY = (box.bottom + (bh * 0.20f).toInt()).coerceIn(4, imgH - 8)
+        val isRotated = (rotationDegrees == 90 || rotationDegrees == 270)
+        val upW = if (isRotated) imgH else imgW
+        val upH = if (isRotated) imgW else imgH
 
-        var strongEdgeCount = 0
-        var totalSamples = 0
+        fun getPixel(u: Int, v: Int): Int {
+            val uClamped = u.coerceIn(0, upW - 1)
+            val vClamped = v.coerceIn(0, upH - 1)
+            val (rawX, rawY) = when (rotationDegrees) {
+                90 -> Pair(vClamped, imgW - 1 - uClamped)
+                270 -> Pair(imgW - 1 - vClamped, uClamped)
+                180 -> Pair(imgW - 1 - uClamped, imgH - 1 - vClamped)
+                else -> Pair(uClamped, vClamped)
+            }
+            val idx = (rawY.coerceIn(0, imgH - 1)) * yRowStride + (rawX.coerceIn(0, imgW - 1))
+            return if (idx in 0 until yBuf.limit()) yBuf.get(idx).toInt() and 0xFF else 0
+        }
 
-        // Vertical gradient scan on left bezel
+        // Bezel check zones: 12% to 35% margin to the left and right of face box in upright coordinate space
+        val leftBezelX = (box.left - (bw * 0.25f).toInt()).coerceIn(4, upW - 8)
+        val rightBezelX = (box.right + (bw * 0.25f).toInt()).coerceIn(4, upW - 8)
+        val topBezelY = (box.top - (bh * 0.20f).toInt()).coerceIn(4, upH - 8)
+        val bottomBezelY = (box.bottom + (bh * 0.20f).toInt()).coerceIn(4, upH - 8)
+
+        var strongLeft = 0
+        var totalLeft = 0
         var y = box.top
         while (y < box.bottom) {
-            val y1 = y.coerceIn(0, imgH - 1)
-            val p0 = yBuf.get(y1 * yRowStride + (leftBezelX - 3)).toInt() and 0xFF
-            val p1 = yBuf.get(y1 * yRowStride + (leftBezelX + 3)).toInt() and 0xFF
+            val p0 = getPixel(leftBezelX - 3, y)
+            val p1 = getPixel(leftBezelX + 3, y)
             val gradL = abs(p1 - p0)
-            if (gradL > 45) strongEdgeCount++
-            totalSamples++
+            if (gradL > 45) strongLeft++
+            totalLeft++
             y += 8
         }
 
         // Vertical gradient scan on right bezel
+        var strongRight = 0
+        var totalRight = 0
         y = box.top
         while (y < box.bottom) {
-            val y1 = y.coerceIn(0, imgH - 1)
-            val p0 = yBuf.get(y1 * yRowStride + (rightBezelX - 3)).toInt() and 0xFF
-            val p1 = yBuf.get(y1 * yRowStride + (rightBezelX + 3)).toInt() and 0xFF
+            val p0 = getPixel(rightBezelX - 3, y)
+            val p1 = getPixel(rightBezelX + 3, y)
             val gradR = abs(p1 - p0)
-            if (gradR > 45) strongEdgeCount++
-            totalSamples++
+            if (gradR > 45) strongRight++
+            totalRight++
             y += 8
         }
 
         // Horizontal gradient scan on top bezel
+        var strongTop = 0
+        var totalTop = 0
         var x = box.left
         while (x < box.right) {
-            val x1 = x.coerceIn(0, imgW - 1)
-            val p0 = yBuf.get((topBezelY - 3) * yRowStride + x1).toInt() and 0xFF
-            val p1 = yBuf.get((topBezelY + 3) * yRowStride + x1).toInt() and 0xFF
+            val p0 = getPixel(x, topBezelY - 3)
+            val p1 = getPixel(x, topBezelY + 3)
             val gradT = abs(p1 - p0)
-            if (gradT > 45) strongEdgeCount++
-            totalSamples++
+            if (gradT > 45) strongTop++
+            totalTop++
             x += 8
         }
 
-        if (totalSamples == 0) return 0f
-        val edgeRatio = strongEdgeCount.toFloat() / totalSamples
+        val rL = if (totalLeft > 0) strongLeft.toFloat() / totalLeft else 0f
+        val rR = if (totalRight > 0) strongRight.toFloat() / totalRight else 0f
+        val rT = if (totalTop > 0) strongTop.toFloat() / totalTop else 0f
+
+        // A phone screen framing a face MUST have bezels enclosing the face on multiple sides (both left and right, or top and side)
+        // A single-sided straight edge (such as an ID card held by the user or an open door) is NOT a framing screen bezel.
+        val isEnclosedBezel = (rL > 0.35f && rR > 0.35f) || (rT > 0.35f && (rL > 0.35f || rR > 0.35f))
+        if (!isEnclosedBezel) return 0f
+
+        val avgRatio = (rL + rR + rT) / 3f
         return when {
-            edgeRatio > 0.40f -> 0.85f // Distinct rectangular bezel border around face
-            edgeRatio > 0.25f -> 0.60f
+            avgRatio > 0.35f -> 0.85f // Distinct rectangular bezel border enclosing face
+            avgRatio > 0.25f -> 0.60f
             else -> 0.0f
         }
     }

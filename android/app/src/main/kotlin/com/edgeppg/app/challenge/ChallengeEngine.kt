@@ -59,20 +59,22 @@ class ChallengeEngine(
         val allGaze = GazeDirection.entries
         val allHead = HeadOrientation.entries
         val allHand = HandGesture.entries
+        val allOptical = OpticalColor.entries
 
         val out = mutableListOf<ChallengeSpec>()
         var prevModality: String? = null
 
         repeat(sequenceLength) {
-            // 35% gaze, 30% head, 20% hand, 15% still-hold (last slot).
+            // 28% gaze, 26% head, 20% hand, 14% optical, 12% still-hold (last slot).
             var modality = if (it == sequenceLength - 1 && prevModality != "still") {
                 "still"
             } else {
                 val r = rng.nextDouble()
                 when {
-                    r < 0.35 -> "gaze"
-                    r < 0.65 -> "head"
-                    r < 0.85 -> "hand"
+                    r < 0.28 -> "gaze"
+                    r < 0.54 -> "head"
+                    r < 0.74 -> "hand"
+                    r < 0.88 -> "optical"
                     else -> "still"
                 }
             }
@@ -85,9 +87,10 @@ class ChallengeEngine(
                 while (modality == prevModality && attempts < 8) {
                     val r = rng.nextDouble()
                     modality = when {
-                        r < 0.35 -> "gaze"
-                        r < 0.65 -> "head"
-                        r < 0.85 -> "hand"
+                        r < 0.28 -> "gaze"
+                        r < 0.54 -> "head"
+                        r < 0.74 -> "hand"
+                        r < 0.88 -> "optical"
                         else -> "still"
                     }
                     attempts++
@@ -104,6 +107,12 @@ class ChallengeEngine(
                 ))
                 "hand" -> out.add(ChallengeSpec.Hand(
                     gesture = allHand.random(rng),
+                    subject = subject,
+                ))
+                "optical" -> out.add(ChallengeSpec.OpticalFlash(
+                    color = allOptical.random(rng),
+                    deltaPct = rng.nextInt(35, 55),
+                    durationMs = 1_500L,
                     subject = subject,
                 ))
                 "still" -> out.add(ChallengeSpec.RemainStill(

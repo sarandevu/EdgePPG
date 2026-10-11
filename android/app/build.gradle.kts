@@ -48,6 +48,13 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    testOptions {
+        unitTests.all {
+            it.maxParallelForks = 1
+            it.jvmArgs("-Xmx128m", "-XX:+UseSerialGC")
+        }
+    }
 }
 
 // (Empty — see comment below for the platform-jar workaround.)
@@ -81,6 +88,8 @@ dependencies {
     // require 468-point landmarks; bounding-box-only would not suffice.
     implementation("com.google.mlkit:face-mesh-detection:16.0.0-beta1")
     implementation("com.google.mlkit:image-labeling:17.0.9")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mediapipe:tasks-vision:0.10.14")
 
     // ---- Stage 13: Transport (Wi-Fi primary, QR fallback) ----
     // OkHttp 4.12.0 is the last 4.x line. JDK 8+, Android minSdk 21+,

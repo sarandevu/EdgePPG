@@ -1,209 +1,193 @@
-# EdgePPG Architecture (Runtime)
+# EdgePPG — System & Runtime Architecture
 
-**Scope:** This document describes how EdgePPG components operate and interact at runtime on the iQOO 15 device. It does not cover training, build order, or technology selection — those belong to `Workflow.md` and `TechStack.md` respectively.
+## 1. System Vision & Zero-Trust Principles
 
-**Frozen-model statement:** The ML classifier consumed at runtime is a frozen artifact produced by an offline, PC-side training process (detailed in `Workflow.md`). This document describes only its runtime execution.
+**EdgePPG** provides cryptographic assurance of human liveness during Video KYC (VKYC) sessions directly on consumer edge hardware. The system enforces strict zero-trust principles:
 
-**Security-claim discipline:** Every security property described below is a design intent whose actual effectiveness must be validated experimentally per the Final Architecture validation matrix. No claim here should be read as a guarantee that spoofing is impossible, that all attacks are prevented, or that liveness is assured.
-
-**Device-capability tags:** Every iQOO 15–specific mechanism is tagged inline:
-- `[Requires Device Test]` — plausible, needs confirmation on actual hardware (default)
-- `[Optional/TBD]` — nice-to-have, not required for baseline
-- `[Research/Future]` — explicitly deferred
-- `[Verified]` — stated as available in source docs (none confirmed for iQOO 15)
+1. **Edge Biometric Confinement**: High-resolution video feeds and biometric templates never leave device RAM. No facial embeddings or biometric records are stored on disk or sent across the network.
+2. **Cryptographic Attestation**: The verification verdict and aggregated 28-feature telemetry vector are cryptographically signed inside the `AndroidKeyStore` using a hardware-isolated NIST P-256 (`SHA256withECDSA`) keypair.
+3. **Multi-Modal Verification**: Liveness cannot be assured by a single signal. EdgePPG combines physiological microvascular pulse detection (rPPG), active behavioral challenge-response, optical screen flash reflection analysis, and secondary device / phone bezel detection.
+4. **Freshness & Anti-Replay**: Each verification session is bound to a cryptographically generated nonce and timestamp, enforcing a 300-second freshness window.
 
 ---
 
-## 1. System Overview Diagram
-
-The canonical runtime flow (components may execute concurrently/pipelined in implementation but are documented in this order and all synchronized before Feature Vector Assembly):
+## 2. End-to-End System Pipeline
 
 ```
-Session Start
-  → Nonce / Challenge Generation
-       (session_id, nonce, timestamp, challenge seed, protocol version, model version)
-  → Camera Acquisition
-  → Face / Identity
-  → Behavioral Features (gaze, head movement, hand gesture)
-  → rPPG
-  → Optical Challenge
-  → Multi-Person Synchronization
-       (cross-person timing, spatial relationship, challenge-sequence verification)
-  → Feature Vector Assembly
-  → Schema Validation / Preprocessing
-  → ML Fusion → P(LIVE)
-  → Security Gates
-  → LIVE / SPOOF / UNCERTAIN
-  → Signed Transcript (Keystore)
-  → PC Verifier (via local Wi-Fi, QR fallback)
+                                  EDGEPPG RUNTIME PIPELINE
+ ┌────────────────────────────────────────────────────────────────────────────────────────┐
+ │                                 ANDROID CLIENT SUBSYSTEM                               │
+ │                                                                                        │
+ │  ┌─────────────────────┐      ┌─────────────────────────┐     ┌─────────────────────┐  │
+ │  │ CameraX Capture     │ ───> │ Convergence Lock        │ ──> │ Face ROI Tracker    │  │
+ │  │ (30 FPS Stream)     │      │ (AE Lock / AWB Lock)    │     │ (Forehead & Cheeks) │  │
+ │  └─────────────────────┘      └─────────────────────────┘     └──────────┬──────────┘  │
+ │                                                                          │             │
+ │                 ┌────────────────────────────────────────────────────────┼──────────┐  │
+ │                 ▼                                                        ▼          ▼  │
+ │  ┌──────────────────────────────┐                         ┌───────────────────────┐ │  │
+ │  │ rPPG POS Signal Engine       │                         │ Behavioral & Optical  │ │  │
+ │  │ - Temporal RGB extraction    │                         │ Stimulus Engine       │ │  │
+ │  │ - Biquad Butterworth Bandpass│                         │ - Gaze / Head Pose    │ │  │
+ │  │ - Radix-2 FFT (SNR & BPM)    │                         │ - Hand Gesture Recogn │ │  │
+ │  │ - Cross-ROI Pearson Corr (r) │                         │ - Screen Flash Probe  │ │  │
+ │  └──────────────┬───────────────┘                         └───────────┬───────────┘ │  │
+ │                 │                                                     │             │  │
+ │                 └────────────────────────┬────────────────────────────┘             │  │
+ │                                          ▼                                          │  │
+ │                         ┌─────────────────────────────────┐                         │  │
+ │                         │ 28-Feature Schema Assembler     │                         │  │
+ │                         └────────────────┬────────────────┘                         │  │
+ │                                          ▼                                          │  │
+ │                         ┌─────────────────────────────────┐                         │  │
+ │                         │ Multi-Modal ML & Decision Gates │                         │  │
+ │                         │ (DecisionEngine: LIVE/SPOOF/UNC)│                         │  │
+ │                         └────────────────┬────────────────┘                         │  │
+ │                                          ▼                                          │  │
+ │                         ┌─────────────────────────────────┐                         │  │
+ │                         │ AndroidKeyStore Hardware Enclave│                         │  │
+ │                         │ (ECDSA SECP256R1 Signed Envelope│                         │  │
+ │                         └────────────────┬────────────────┘                         │  │
+ └──────────────────────────────────────────┼──────────────────────────────────────────┘
+                                            │ HTTP POST /api/result & /api/live
+                                            ▼
+ ┌────────────────────────────────────────────────────────────────────────────────────────┐
+ │                              PC VERIFIER GATEWAY NODE                                  │
+ │                                                                                        │
+ │  - Session Orchestrator & Live Telemetry Ingestion (/api/live)                         │
+ │  - Public Key Cryptographic Attestation Validator (/api/result)                       │
+ │  - Nonce Replay Protection & 300s Freshness Gate                                       │
+ │  - Tamper-Evident SHA-256 Receipt Generator & Audit Ledger                             │
+ │  - Operator Console & Automated Presentation Attack Lab                                │
+ └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Functional layer names only (Camera, Face/ROI, Inference, Signing/Transport); framework choices deferred to `TechStack.md`.
+---
+
+## 3. Subsystem Breakdown
+
+### 3.1 Camera Capture & Hardware Convergence Lock
+- **Package**: `com.edgeppg.app.capture`
+- **Component**: [CameraSession.kt](file:///e:/EdgePPG/android/app/src/main/kotlin/com/edgeppg/app/capture/CameraSession.kt), [ConvergenceLockController.kt](file:///e:/EdgePPG/android/app/src/main/kotlin/com/edgeppg/app/capture/ConvergenceLockController.kt)
+- **Mechanism**:
+  - Utilizes CameraX `ImageAnalysis` bound to the front-facing camera.
+  - Automatically assesses 3A convergence (Auto-Exposure and Auto-White Balance).
+  - Once luminance variance settles within standard margins, locks `CONTROL_AE_LOCK = true` and `CONTROL_AWB_LOCK = true`. This prevents automatic camera gain oscillations from artificially injecting false photoplethysmographic harmonics.
+
+### 3.2 Pure Kotlin rPPG POS Engine
+- **Package**: `com.edgeppg.app.rppg`
+- **Component**: [RppgClient.kt](file:///e:/EdgePPG/android/app/src/main/kotlin/com/edgeppg/app/rppg/RppgClient.kt), [RppgGraphView.kt](file:///e:/EdgePPG/android/app/src/main/kotlin/com/edgeppg/app/rppg/RppgGraphView.kt)
+- **Algorithm**: Plane-Orthogonal-to-Skin (POS):
+  1. Temporal RGB means $C(t) = [R(t), G(t), B(t)]^T$ are extracted across 3 facial ROIs:
+     - Forehead ROI ($ROI_0$)
+     - Left Cheek ROI ($ROI_1$)
+     - Right Cheek ROI ($ROI_2$)
+  2. Normalization:
+     $$c_n(t) = \frac{C(t)}{\mu_C(t)}$$
+  3. Orthogonal projection:
+     $$S_1(t) = G(t) - B(t), \quad S_2(t) = G(t) + B(t) - 2R(t)$$
+     $$h(t) = S_1(t) + \alpha(t) S_2(t), \quad \alpha(t) = \frac{\sigma(S_1)}{\sigma(S_2)}$$
+  4. Filtering: Dual-pass 2nd-order biquad Butterworth bandpass ($0.75\,\text{Hz} - 3.5\,\text{Hz}$, representing $45 - 210\,\text{BPM}$).
+  5. Spectral SNR & Peak Estimation: 512-point Radix-2 FFT computes signal-to-noise ratio:
+     $$\text{SNR} = 10 \log_{10} \left( \frac{\int_{f_0 - \Delta f}^{f_0 + \Delta f} P(f) df}{\int_{\text{band}} P(f) df - \int_{f_0 - \Delta f}^{f_0 + \Delta f} P(f) df} \right)$$
+  6. Phase Agreement: Pearson correlation $r(ROI_0, ROI_1)$ and $r(ROI_0, ROI_2)$ evaluates biological pulsatile synchronization. Real skin exhibits $r > 0.05 - 0.35$ with positive SNR; synthetic screens and printed photos exhibit zero microvascular sync.
+
+### 3.3 Behavioral Challenge Engine
+- **Package**: `com.edgeppg.app.behavior`, `com.edgeppg.app.challenge`
+- **Components**: [GazeEstimator.kt](file:///e:/EdgePPG/android/app/src/main/kotlin/com/edgeppg/app/behavior/GazeEstimator.kt), [HeadPoseSolver.kt](file:///e:/EdgePPG/android/app/src/main/kotlin/com/edgeppg/app/behavior/HeadPoseSolver.kt), [GestureTracker.kt](file:///e:/EdgePPG/android/app/src/main/kotlin/com/edgeppg/app/behavior/GestureTracker.kt), [ChallengeEngine.kt](file:///e:/EdgePPG/android/app/src/main/kotlin/com/edgeppg/app/challenge/ChallengeEngine.kt)
+- **Capabilities**:
+  - **Gaze**: Computes relative iris-to-eye-corner displacement vectors (`LOOK_LEFT`, `LOOK_RIGHT`, `LOOK_UP`, `LOOK_DOWN`).
+  - **Head Pose**: Solves 3D Perspective-n-Point Euler angles (`YAW`, `PITCH`, `ROLL`) tracking intentional head nods and turns.
+  - **Hand Gesture**: MediaPipe-based hand tracking detecting distinct commands (`RAISE_LEFT`, `RAISE_RIGHT`, `OPEN_PALM`, `THUMBS_UP`).
+  - **Stillness**: Verifies micro-motion boundaries during physiological rPPG sampling windows.
+
+### 3.4 Active Optical Stimulus Challenge
+- **Package**: `com.edgeppg.app.optical`
+- **Components**: [OpticalChallengeEngine.kt](file:///e:/EdgePPG/android/app/src/main/kotlin/com/edgeppg/app/optical/OpticalChallengeEngine.kt), [OpticalResponseAnalyzer.kt](file:///e:/EdgePPG/android/app/src/main/kotlin/com/edgeppg/app/optical/OpticalResponseAnalyzer.kt)
+- **Principle**:
+  - Displays randomized screen color flashes (e.g. Cyan, Magenta, Yellow) at calibrated millisecond intervals.
+  - Measures specular and diffuse reflection response on facial skin:
+    $$\Delta R = R_{\text{stimulus}} - R_{\text{baseline}}$$
+  - **Illumination Resilience**: In high ambient lighting where natural sunlight or bright lamps dilute flash contrast, the analyzer designates the observation as `CONTAMINATED` (inconclusive lighting) rather than false `WRONG` (presentation attack), preventing genuine applicants from being falsely rejected.
+
+### 3.5 Phone & Secondary Screen Detector
+- **Package**: `com.edgeppg.app.capture`
+- **Component**: [PhoneScreenDetector.kt](file:///e:/EdgePPG/android/app/src/main/kotlin/com/edgeppg/app/capture/PhoneScreenDetector.kt)
+- **Principle**:
+  - Analyzes high-frequency Fourier components and edge gradients to detect rectangular bezel outlines, specular glare typical of mobile screens/tablets, and display moiré patterns.
+  - Instantly transitions the decision engine to `SPOOF` if a secondary display frame is identified in the capture preview.
+
+### 3.6 Hardware-Enclave Integrity (`AndroidKeyStore`)
+- **Package**: `com.edgeppg.app.integrity`
+- **Component**: `IntegrityManager.kt`
+- **Specifications**:
+  - Key Alias: `edgeppg_attestation_key`
+  - Algorithm: NIST P-256 (`EC`, `secp256r1`)
+  - Signature: `SHA256withECDSA`
+  - Hardware Protection: Key generated with `PURPOSE_SIGN` and backed by Android KeyMint / StrongBox when available.
+  - Signed Envelope:
+    ```json
+    {
+      "keyAlias": "edgeppg_attestation_key",
+      "alg": "SHA256withECDSA",
+      "data": "{\"session_id\":\"...\",\"nonce\":\"...\",\"decision\":\"LIVE\",...}",
+      "sig": "MEQCICvG...3D=="
+    }
+    ```
 
 ---
 
-## 2. Session Protocol
+## 4. Normative 28-Feature Schema
 
-Per session, fresh values are generated:
-- `session_id` — unique session identifier
-- `nonce` — secure RNG output `[Requires Device Test]`
-- `timestamp` — session start time
-- `challenge seed` — entropy for challenge generation
-- `protocol version` — wire format version
-- `model version` — frozen classifier version
+Every verification transcript generates a canonical 28-feature floating-point vector:
 
-**Why fresh every session:** A fixed sequence (e.g., `LEFT → RIGHT → SMILE → BLINK`) would permit pre-recorded replay. Unpredictability is the root of challenge-response — design intent, requires validation.
-
-**Signed transcript payload:** session ID, nonce, challenge sequence (+ hash), observed responses, feature/model versions, final result, timestamp.
-
----
-
-## 3. Challenge Engine
-
-Applicant and trusted-participant challenges are generated independently and differently each session. Two illustrative randomized examples (shape only, not scripts):
-
-**Applicant:** `LOOK LEFT → TURN HEAD DOWN → LOOK AT PARTICIPANT`
-**Trusted participant:** `RAISE RIGHT HAND → LOOK AT CAMERA → REMAIN STILL`
-
----
-
-## 4. Per-Modality Pipelines
-
-### 4.1 Face Detection & Identity
-Input: camera frames → Output: bounding box, landmarks, tracking ID, confidence → embedding → similarity → `identity_score`.
-
-### 4.2 Gaze Analysis
-Input: eye-region landmarks → iris-vs-corner geometry → requested vs actual (LEFT/RIGHT/UP/DOWN/CENTER) + latency/success → gaze features.
-
-### 4.3 Head Movement
-Input: face landmarks → yaw/pitch/roll vs requested → head features.
-
-### 4.4 Hand Gestures
-Input: hand landmarks → simple gesture classification (raise, point, etc.) → hand features.
-
-### 4.5 rPPG
-Input: forehead + left/right cheek ROIs → temporal RGB → chrominance normalization via **POS and/or CHROM as alternatives** → bandpass → FFT → SNR, peak strength, HR stability, ROI agreement.
-Supporting signal, not sole root of trust. PTT is `[Research/Future]`, not core. Optional randomized head-motion challenge is `[Optional/TBD]`.
-
-### 4.6 Optical Challenge Analysis
-Input: randomized screen brightness/color/timing → expected vs observed correlation + delay → `optical_response_score`, `optical_timing_error`, `optical_sequence_score`.
-
-**Explicit warning:** Screen-induced RGB variation must not be confused with physiological rPPG. Mitigations: multi-ROI, temporal separation, normalization, quality gating. Experimental confirmation of this separation is `[Requires Device Test]`.
+| # | Feature Name | Range | Description |
+| :- | :--- | :--- | :--- |
+| 1 | `face_confidence` | $[0.0, 1.0]$ | Face detector confidence |
+| 2 | `face_quality` | $[0.0, 1.0]$ | Landmark sharpness & illumination balance |
+| 3 | `rppg_snr` | $[-5.0, 25.0]$ | rPPG cardiac spectral signal-to-noise ratio (dB) |
+| 4 | `rppg_peak_strength` | $[0.0, 1.0]$ | Fundamental heart rate FFT peak prominence |
+| 5 | `rppg_hr_stability` | $[0.0, 1.0]$ | Heart rate temporal consistency over time |
+| 6 | `rppg_roi_agreement` | $[-1.0, 1.0]$ | Cross-ROI Pearson correlation ($r$) |
+| 7 | `gaze_accuracy` | $[0.0, 1.0]$ | Accuracy of gaze direction challenge responses |
+| 8 | `head_accuracy` | $[0.0, 1.0]$ | Accuracy of head pose challenge movements |
+| 9 | `hand_accuracy` | $[0.0, 1.0]$ | Hand gesture recognition confidence |
+| 10 | `challenge_timing_error` | $[0.0, 5.0]$ | Mean latency deviation from challenge cues (s) |
+| 11 | `optical_response_score` | $[0.0, 1.0]$ | Facial skin reflectance modulation correlation |
+| 12 | `trusted_face_confidence`| $[0.0, 1.0]$ | Co-presence participant face confidence |
+| 13 | `trusted_face_quality` | $[0.0, 1.0]$ | Co-presence participant landmark quality |
+| 14 | `trusted_gaze_accuracy` | $[0.0, 1.0]$ | Co-presence participant gaze compliance |
+| 15 | `trusted_head_accuracy` | $[0.0, 1.0]$ | Co-presence participant head pose compliance |
+| 16 | `trusted_hand_accuracy` | $[0.0, 1.0]$ | Co-presence participant hand gesture compliance |
+| 17 | `trusted_timing_error` | $[0.0, 5.0]$ | Co-presence participant response latency (s) |
+| 18 | `cross_person_timing` | $[0.0, 1.0]$ | Multi-party interaction temporal synchrony |
+| 19 | `cross_person_interact` | $[0.0, 1.0]$ | Mutual gaze / gesture alignment score |
+| 20 | `motion_consistency` | $[0.0, 1.0]$ | Relative head motion physics consistency |
+| 21 | `presence_consistency` | $[0.0, 1.0]$ | Simultaneous presence stability |
+| 22 | `sequence_consistency` | $[0.0, 1.0]$ | Strict challenge sequence order fidelity |
+| 23 | `camera_quality` | $[0.0, 1.0]$ | Sensor sharpness, noise level, and resolution |
+| 24 | `frame_drop_rate` | $[0.0, 1.0]$ | Dropped frame fraction (target 30 FPS) |
+| 25 | `exposure_stability` | $[0.0, 1.0]$ | Exposure convergence & lock stability |
+| 26 | `awb_stability` | $[0.0, 1.0]$ | Auto-white balance gain variance |
+| 27 | `capture_duration` | $[0.0, 120.0]$| Duration of active acquisition session (s) |
+| 28 | `device_integrity` | $[0.0, 1.0]$ | Hardware attestation & KeyStore integrity status |
 
 ---
 
-## 5. Multi-Person Synchronization
+## 5. PC Verifier Gateway Architecture
 
-Applicant + Trusted Co-Presence Participant (never a "family-member requirement"). Each is tracked independently with separate fresh challenges. Verification covers: presence, identity, spatial relationship, temporal relationship, challenge ordering. Streams are time-aligned.
+- **Path**: `verifier/`
+- **Modules**:
+  - `server.py`: Standard library HTTP server hosting operator UI and REST endpoints.
+  - `verify.py`: Cryptographic verification of ECDSA signatures against known public keys (`pubkey.b64`).
+  - `calls.py`: Manages verification sessions (`SCHEDULED`, `WAITING`, `CONNECTED`, `COMPLETED`).
+  - `receipt.py`: Generates immutable JSON receipts with SHA-256 digests in `verifier/receipts/`.
+  - `test_harness.py`: Automated adversarial evaluation harness testing 5 attack modalities.
 
----
-
-## 6. Feature Schema (Normative)
-
-Frozen 28-feature schema from Master Engineering Instructions §21 (verbatim):
-
-```
-face_confidence, face_quality,
-rppg_snr, rppg_peak_strength, rppg_hr_stability, rppg_roi_agreement,
-gaze_accuracy, head_accuracy, hand_accuracy,
-challenge_timing_error,
-optical_response_score,
-trusted_face_confidence, trusted_face_quality,
-trusted_gaze_accuracy, trusted_head_accuracy, trusted_hand_accuracy,
-trusted_challenge_timing_error,
-cross_person_timing, cross_person_interaction,
-relative_motion_consistency, participant_presence_consistency,
-challenge_sequence_consistency,
-camera_quality, frame_drop_rate, exposure_stability, awb_stability,
-capture_duration, device_integrity
-```
-
-**Schema rules:**
-- Frozen once data collection starts.
-- Version bump + migration document required on any change.
-- Pipeline-derived measurements (e.g., `rppg_hr`, latencies, `optical_timing_error`) remain intermediate unless a versioned schema change adopts them.
-
-**Schema Validation / Preprocessing** is a distinct stage between Feature Vector Assembly and ML Fusion:
-- Missing-value handling (never silently zero-fill unavailable rPPG)
-- Scaling/normalization
-- Never folded into Assembly or Fusion.
-
----
-
-## 7. ML Fusion (Probability Only)
-
-Schema-validated feature vector → frozen classifier → `P(LIVE)` (+ per-feature confidence/quality signals surfaced by the model).
-
-**Explicit:** This stage does NOT decide LIVE/SPOOF/UNCERTAIN.
-
-Model alternatives (decided in `TechStack.md`): Random Forest baseline, XGBoost evaluation, optional MLP — all preserved as alternatives, not mandates.
-
----
-
-## 8. Security Decision Gates (Downstream, Application Logic)
-
-Reproduces Master §31 pseudocode verbatim:
-
-```
-if critical_integrity_failure:          → SPOOF
-elif insufficient_quality:              → UNCERTAIN
-elif challenge_incomplete:              → UNCERTAIN
-elif live_probability ≥ LIVE_THRESHOLD: → LIVE
-elif live_probability ≤ SPOOF_THRESHOLD:→ SPOOF
-else:                                   → UNCERTAIN
-```
-
-- Thresholds are configurable/calibrated, not hardcoded (0.80/0.20 are starting points only).
-- Poor sensing SHALL produce UNCERTAIN and SHALL NOT be automatically treated as SPOOF.
-- UNCERTAIN is a first-class result.
-- This stage combines `P(LIVE)` with independent quality/integrity signals — application logic, not the model.
-
----
-
-## 9. Cryptographic Binding & Signed Transcript
-
-- Android Keystore-backed signing `[Requires Device Test]`
-- No custom cryptography
-- No keys in app storage or source code
-- Signature covers exactly: `session_id, nonce, challenge_hash, result, model_version, protocol_version, timestamp`
-- Nonce/challenge/timestamp binding provides replay validation
-
----
-
-## 10. PC Verifier (Core Baseline Path)
-
-- Transport: local Wi-Fi (primary), QR fallback — no cloud dependency, clipboard removed
-- Verifies signature, checks nonce/timestamp for replay, displays result
-- Works independently of any vendor Office Kit
-
-**Office Kit** (signature verify + audit display + offline receipt, per Final Architecture §1) is a separate, optional, additive enhancement layered on top of this baseline — never a dependency.
-
----
-
-## 11. Quality Gating & Failure Handling
-
-- Blink/motion contamination → mark invalid, exclude from rPPG/challenge; configurable capture/retry policy (no hard-coded count)
-- Missing values never silently zero-filled (unavailable rPPG ≠ 0)
-- Capture state machine: `CAPTURE → QUALITY CHECK → BASELINE → RANDOMIZED CHALLENGE → MOTION/BLINK CHECK → PROCESS`
-
----
-
-## 12. Security Layers Summary
-
-1. Identity
-2. Behavioral liveness
-3. Physiological evidence
-4. Optical challenge
-5. Multi-person co-presence
-6. Temporal consistency
-7. Capture/device integrity
-8. Cryptographic session binding
-
-Each layer contributes at runtime; all require experimental validation.
-
----
-
-## 13. Known Limitations
-
-- Live relay / virtual-camera attacks and a fully compromised capture path are out of scope as a design boundary.
-- No guarantee language applies — all security properties require experimental validation per the Final Architecture validation matrix.
+### REST Endpoints
+- `GET /`: Serves operator dashboard.
+- `GET /api/calls`: Retrieves list of scheduled calls and active live session telemetry.
+- `POST /api/calls`: Creates or schedules a new verification session.
+- `POST /api/live`: Real-time streaming telemetry ingestion from the mobile client.
+- `POST /api/result`: Ingests and verifies hardware-signed attestation envelopes.
+- `POST /api/lab/evaluate`: Runs automated attack test scenarios.

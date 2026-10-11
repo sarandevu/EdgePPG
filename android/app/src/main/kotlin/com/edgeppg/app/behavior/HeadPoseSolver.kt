@@ -31,13 +31,13 @@ import kotlin.math.hypot
 object HeadPoseSolver {
 
     /** Yaw in degrees above which we report TURN_LEFT / TURN_RIGHT. */
-    private const val YAW_THRESHOLD_DEG = 12f
+    private const val YAW_THRESHOLD_DEG = 5.5f
 
     /** Pitch in degrees above which we report TURN_UP / TURN_DOWN. */
-    private const val PITCH_THRESHOLD_DEG = 8f
+    private const val PITCH_THRESHOLD_DEG = 4.0f
 
     /** Roll in degrees above which we report NOD / SHAKE_NO. */
-    private const val ROLL_THRESHOLD_DEG = 10f
+    private const val ROLL_THRESHOLD_DEG = 6.0f
 
     fun estimate(meshPoints: FloatArray): HeadPose {
         val nose = MeshLandmarks.point(meshPoints, MeshLandmarks.NOSE_TIP)
@@ -56,26 +56,19 @@ object HeadPoseSolver {
             return HeadPose(0f, 0f, 0f, available = false)
         }
 
-        // Yaw: distance from nose tip to left mouth corner vs right mouth
-        // corner. Asymmetry maps to yaw.
+        // Yaw: distance from nose tip to left mouth corner vs right mouth corner.
         val dL = hypot(nose[0] - leftMouth[0], nose[1] - leftMouth[1])
         val dR = hypot(nose[0] - rightMouth[0], nose[1] - rightMouth[1])
-        val yawRad = atan2(dL - dR, dL + dR)  // signed, ≈ 0 frontal
+        val yawRad = atan2(dR - dL, dR + dL)  // signed, +ve when turning LEFT, -ve when turning RIGHT
         val yawDeg = (yawRad * 180.0 / PI).toFloat()
 
-        // Pitch: vertical position of the nose tip relative to the
-        // forehead-chin midpoint. Frontal face: ~50%. Higher → TURN_UP.
+        // Pitch: vertical position of the nose tip relative to forehead-chin span.
+        // On a neutral human face, the nose tip is naturally ~5% below midpoint.
         val midY = 0.5f * (forehead[1] + chin[1])
         val spanY = (chin[1] - forehead[1]).coerceAtLeast(1f)
-        val noseFrac = (nose[1] - midY) / spanY   // signed (-0.5..+0.5)
-        val pitchDeg = noseFrac * -60f  // +ve = TURN_UP, −ve = TURN_DOWN
+        val noseFrac = ((nose[1] - midY) / spanY) - 0.05f
+        val pitchDeg = noseFrac * -70f  // +ve = TURN_UP, −ve = TURN_DOWN
 
-        // Roll: angle of the eye-line. Y is inverted in image space
-        // (image Y grows downward). We compute the angle going from the
-        // subject's left eye (image-right) to the subject's right eye
-        // (image-left). For a frontal face this is the negative of the
-        // image-X axis, so atan2(0, -dx) = π in raw; we flip the sign
-        // so a frontal face is 0°.
         val dx = leftEyeOuter[0] - rightEyeOuter[0]
         val dy = leftEyeOuter[1] - rightEyeOuter[1]
         val rollRad = atan2(dy, dx)

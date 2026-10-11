@@ -36,7 +36,14 @@ Thumbs.db
 *.jpeg
 *.mp4
 window_dump*.xml
-cd
-opencode
 verifier/receipts/lab-*.json
 
+# JVM crash dumps & logs
+hs_err_pid*.log
+replay_pid*.log
+*.log
+
+# Heavy binary datasets & local backups
+android_finale/
+offline_dataset/
+*.bin

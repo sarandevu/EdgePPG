@@ -19,6 +19,8 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.edgeppg.app.Log
+import com.edgeppg.app.challenge.ChallengeSpec
+import com.edgeppg.app.challenge.OpticalColor
 import com.edgeppg.app.quality.QualityGate
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -88,6 +90,13 @@ class CameraSession(
     @Volatile private var lastAwbG: Float? = null
     @Volatile private var lastAwbB: Float? = null
 
+    @Volatile var panCardOcr: com.edgeppg.app.document.PanCardOcr? = null
+    @Volatile var isDocumentMode: Boolean = false
+
+    fun suppressPhoneDetector() {
+        phoneDetector.suppressForDocument()
+    }
+
     fun start(previewView: PreviewView? = null) {
         val providerFuture = ProcessCameraProvider.getInstance(context)
         providerFuture.addListener({
@@ -117,6 +126,100 @@ class CameraSession(
         lastAwbR = null
         lastAwbG = null
         lastAwbB = null
+    }
+
+    // Optical closed-loop measurement state
+    @Volatile var opticalEngine: com.edgeppg.app.optical.OpticalChallengeEngine? = null
+    @Volatile private var opticalFlashActive: Boolean = false
+    @Volatile private var opticalFlashSpec: ChallengeSpec.OpticalFlash? = null
+    private var preFlashR = 0f
+    private var preFlashG = 0f
+    private var preFlashB = 0f
+    private var flashSampleCount = 0
+    private var flashSumR = 0f
+    private var flashSumG = 0f
+    private var flashSumB = 0f
+
+    /**
+     * Clear pipeline caches and reset state at session boundary.
+     */
+    fun reset() {
+        roiTracker.reset()
+        phoneDetector.reset()
+        lockController.reset()
+        qualityGate.reset()
+        facePresent = false
+        frameNumber = 0L
+        locked = false
+        opticalFlashActive = false
+        opticalFlashSpec = null
+        preFlashR = 0f
+        preFlashG = 0f
+        preFlashB = 0f
+        flashSampleCount = 0
+        flashSumR = 0f
+        flashSumG = 0f
+        flashSumB = 0f
+        lastExposureNs = null
+        lastSensitivityIso = null
+        lastAwbR = null
+        lastAwbG = null
+        lastAwbB = null
+    }
+
+    /**
+     * Arm closed-loop optical reflectance verification during flash stimulus.
+     */
+    fun startOpticalMeasurement(spec: ChallengeSpec.OpticalFlash) {
+        opticalFlashSpec = spec
+        flashSampleCount = 0
+        flashSumR = 0f
+        flashSumG = 0f
+        flashSumB = 0f
+        opticalFlashActive = true
+    }
+
+    /**
+     * Conclude flash window, verify spectral shift on face ROI, and compute response score.
+     */
+    fun endOpticalMeasurement(): Float {
+        val engineResult = opticalEngine?.latestResult
+        if (engineResult != null && engineResult.isValid) {
+            val score = engineResult.opticalResponseScore
+            listener.onOpticalResponse(score)
+            return score
+        }
+
+        val spec = opticalFlashSpec
+        opticalFlashActive = false
+        opticalFlashSpec = null
+
+        if (spec == null || !facePresent || flashSampleCount == 0 || preFlashR == 0f) {
+            return Float.NaN
+        }
+
+        val avgFlashR = flashSumR / flashSampleCount
+        val avgFlashG = flashSumG / flashSampleCount
+        val avgFlashB = flashSumB / flashSampleCount
+
+        val dR = avgFlashR - preFlashR
+        val dG = avgFlashG - preFlashG
+        val dB = avgFlashB - preFlashB
+        val dLum = (dR + dG + dB) / 3f
+
+        val spectralMatch = when (spec.color) {
+            OpticalColor.WHITE -> dLum > 0.3f
+            OpticalColor.WARM -> dR > dB && dLum > 0.2f
+            OpticalColor.COOL -> dB > dR && dLum > 0.2f
+        }
+
+        val score = if (spectralMatch) {
+            (dLum / 12f).coerceIn(0.25f, 0.95f)
+        } else {
+            0.05f
+        }
+        listener.onOpticalResponse(score)
+        return score
     }
 
     private fun bindUseCases(locked: Boolean, previewView: PreviewView?) {
@@ -287,21 +390,62 @@ class CameraSession(
 
             // 1. Run / reuse face-mesh ROIs.
             val res = roiTracker.update(image, imageProxy.imageInfo.rotationDegrees)
+            val isRotated = (imageProxy.imageInfo.rotationDegrees == 90 || imageProxy.imageInfo.rotationDegrees == 270)
+            val upWidth = if (isRotated) image.height else image.width
+            val upHeight = if (isRotated) image.width else image.height
+            @androidx.annotation.OptIn(androidx.camera.view.TransformExperimental::class)
+            val sourceTransform = try {
+                androidx.camera.view.transform.ImageProxyTransformFactory().apply {
+                    isUsingRotationDegrees = true
+                }.getOutputTransform(imageProxy)
+            } catch (_: Throwable) {
+                null
+            }
+            listener.onMeshPoints(res?.meshPoints ?: FloatArray(0), res?.facePresent == true)
+            listener.onRoisUpdated(
+                res?.rois,
+                res?.faceBox,
+                res?.meshPoints ?: FloatArray(0),
+                upWidth,
+                upHeight,
+                imageProxy.imageInfo.rotationDegrees,
+                sourceTransform
+            )
+            listener.onFaceCountChanged(res?.faceCount ?: 0, res?.multipleFaces == true)
 
             // 1b. Inspect frame for phone/secondary screen presentation attack
+            phoneDetector.isDocumentModeActive = isDocumentMode
             val phoneResult = phoneDetector.processFrame(
-                image = image,
-                rotationDegrees = imageProxy.imageInfo.rotationDegrees,
+                imageProxy = imageProxy,
                 meshPoints = res?.meshPoints ?: FloatArray(0),
                 faceBox = res?.faceBox,
             )
             listener.onPhoneDetected(phoneResult.isPhoneDetected, phoneResult.reason)
+
+            // 1c. Submit frame every 2 frames to gesture tracker with face region excluded
+            if (currentFrame % 2L == 0L) {
+                com.edgeppg.app.behavior.GestureTracker.processYuv(
+                    image = image,
+                    rotationDegrees = imageProxy.imageInfo.rotationDegrees,
+                    faceBox = res?.faceBox,
+                    timestampMs = System.currentTimeMillis()
+                )
+            }
+
+            // 1d. Submit frame to PAN Card OCR engine (continuously in doc mode, or every 5 frames)
+            if (isDocumentMode || currentFrame % 5L == 0L) {
+                panCardOcr?.processFullFrame(
+                    image = image,
+                    rotationDegrees = imageProxy.imageInfo.rotationDegrees
+                )
+            }
 
             if (res == null || res.rois == null || !res.facePresent) {
                 if (facePresent) {
                     facePresent = false
                     listener.onFaceLost()
                 }
+                opticalEngine?.onFrame(System.currentTimeMillis(), FloatArray(9), false)
                 return
             }
             if (!facePresent) {
@@ -309,9 +453,25 @@ class CameraSession(
                 listener.onFaceRestored()
             }
 
-            // 2. Mean RGB per ROI from the raw YUV planes.
-            val ok = roiTracker.meanRgbPerRoi(image, res.rois, outMeans)
+            // 2. Mean RGB per ROI from the raw YUV planes (with rotation translation).
+            val ok = roiTracker.meanRgbPerRoi(image, res.rois, outMeans, imageProxy.imageInfo.rotationDegrees)
             if (!ok) return
+
+            // 2b. Track facial skin ROI response for closed-loop optical verification
+            opticalEngine?.onFrame(System.currentTimeMillis(), outMeans, facePresent)
+            val curR = (outMeans[0] + outMeans[3] + outMeans[6]) / 3f
+            val curG = (outMeans[1] + outMeans[4] + outMeans[7]) / 3f
+            val curB = (outMeans[2] + outMeans[5] + outMeans[8]) / 3f
+            if (opticalFlashActive) {
+                flashSumR += curR
+                flashSumG += curG
+                flashSumB += curB
+                flashSampleCount++
+            } else {
+                preFlashR = curR
+                preFlashG = curG
+                preFlashB = curB
+            }
 
             // 3. Quality Gate — record + decide + emit (Stage 3).
             qualityGate.record(

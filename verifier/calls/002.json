@@ -1,0 +1,13 @@
+{
+  "applicant_name": "User 1",
+  "applicant_ref": "User1",
+  "call_id": "002",
+  "completed_at_ms": null,
+  "connected_at_ms": null,
+  "created_at_ms": 1790504660204,
+  "result": null,
+  "scheduled_epoch_ms": 1790504640000,
+  "scheduled_time": "2026-09-27T15:54",
+  "status": "SCHEDULED",
+  "waiting_since_ms": null
+}

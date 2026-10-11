@@ -58,6 +58,8 @@ object DecisionEngine {
         val liveProbability: Float,
         val phoneDetected: Boolean = false,
         val phoneReason: String = "",
+        val multipleFaces: Boolean = false,
+        val faceCount: Int = 1,
     )
 
     /**
@@ -96,15 +98,22 @@ object DecisionEngine {
             return Verdict(Decision.SPOOF, r)
         }
 
-        // 2. Insufficient quality — UNCERTAIN, never auto-SPOOF.
-        //    EXCEPTION: If we have strong accumulated physiological evidence
-        //    (from peak rPPG values across the session), do NOT let transient
-        //    quality issues (movement contamination, brief face-flicker, lock jitter)
-        //    override the physiological verdict. A real person moving their head
-        //    will trigger contamination, but their PEAK signal (when still) will
-        //    clearly show live pulse. A spoof's peak will remain low.
-        if (!inputs.hasFace || !inputs.lockState || inputs.contaminationFlag) {
-            // If we have accumulated physiological evidence, let it decide
+        // 1c. Mandatory facial presence invariants (Fix 2.1 & 2.2):
+        // A single genuine face is a non-negotiable prerequisite for liveness.
+        // Missing face or multiple faces must NEVER produce LIVE under any circumstance,
+        // and must deterministically route to UNCERTAIN regardless of ML probability.
+        if (!inputs.hasFace) {
+            return Verdict(Decision.UNCERTAIN, "insufficient-quality:no-face")
+        }
+        if (inputs.multipleFaces || inputs.faceCount > 1) {
+            return Verdict(Decision.UNCERTAIN, "insufficient-quality:multiple-faces-detected")
+        }
+
+        // 2. Transient sensing quality — UNCERTAIN, never auto-SPOOF.
+        //    At this stage, a valid single face is confirmed present.
+        //    If we have strong accumulated physiological evidence, transient movement
+        //    contamination or lock jitter on a real applicant can yield to accumulated pulse.
+        if (!inputs.lockState || inputs.contaminationFlag) {
             if (!inputs.liveProbability.isNaN()) {
                 if (inputs.liveProbability <= thresholds.spoof) {
                     return Verdict(Decision.SPOOF,
@@ -119,7 +128,6 @@ object DecisionEngine {
                 Decision.UNCERTAIN,
                 "insufficient-quality:"
                     + listOf(
-                        if (!inputs.hasFace) "no-face" else null,
                         if (!inputs.lockState) "no-lock" else null,
                         if (inputs.contaminationFlag) "contamination" else null,
                     ).filterNotNull().joinToString(","),
@@ -133,16 +141,27 @@ object DecisionEngine {
             return Verdict(Decision.UNCERTAIN, "high-drop-rate:${inputs.dropRate}")
         }
 
-        // 3. Positive Spoof Detection — BEFORE optional quality gates.
+        // 3. Challenge incomplete for non-spoof applicant — UNCERTAIN (FR-SESS-5 / FR-GATE-3).
+        if (!inputs.challengeCompleted) {
+            return Verdict(Decision.UNCERTAIN, "challenge-incomplete")
+        }
+
+        // 4. NaN P(LIVE) → no ML evidence → UNCERTAIN. We do NOT call this
+        //    SPOOF. (Architecture §8 pseudocode + FR-GATE-4.)
+        if (inputs.liveProbability.isNaN()) {
+            return Verdict(Decision.UNCERTAIN, "no-ml-evidence:NaN")
+        }
+
+        // 5. Positive Spoof Detection — BEFORE optional quality gates.
         //    Exposure/AWB stability problems on a screen/photo must NOT mask
         //    a clear spoof signal. If the ML/physiological evidence says the
         //    subject is a presentation attack, that is the priority verdict.
-        if (!inputs.liveProbability.isNaN() && inputs.liveProbability <= thresholds.spoof) {
+        if (inputs.liveProbability <= thresholds.spoof) {
             return Verdict(Decision.SPOOF,
                 "p(live)<=spoof-threshold:${inputs.liveProbability}")
         }
 
-        // 4. Optional quality gates (exposure/AWB stability).
+        // 6. Optional quality gates (exposure/AWB stability).
         //    These run AFTER spoof detection so they don't mask a clear spoof.
         if (!inputs.exposureStability.isNaN() &&
             inputs.exposureStability < thresholds.minExposureStabilityForPass) {
@@ -155,22 +174,12 @@ object DecisionEngine {
                 "low-awb-stability:${inputs.awbStability}")
         }
 
-        // 5. Challenge incomplete for non-spoof applicant — UNCERTAIN (FR-SESS-5 / FR-GATE-3).
-        if (!inputs.challengeCompleted) {
-            return Verdict(Decision.UNCERTAIN, "challenge-incomplete")
-        }
-
-        // 6. NaN P(LIVE) → no ML evidence → UNCERTAIN. We do NOT call this
-        //    SPOOF. (Architecture §8 pseudocode + FR-GATE-4.)
-        if (inputs.liveProbability.isNaN()) {
-            return Verdict(Decision.UNCERTAIN, "no-ml-evidence:NaN")
-        }
-
         // 7. Threshold gates.
         if (inputs.liveProbability >= thresholds.live) {
             return Verdict(Decision.LIVE,
                 "p(live)>=live-threshold:${inputs.liveProbability}")
         }
+
         return Verdict(Decision.UNCERTAIN,
             "p(live)-borderline:${inputs.liveProbability}")
     }

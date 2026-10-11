@@ -1,0 +1,11 @@
+{
+  "name": "edgeppg",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EdgePPG VKYC Assurance & Verification Gateway",
+  "scripts": {
+    "dev": ".\\.venv\\Scripts\\python.exe -m verifier.server --port 8080",
+    "start": ".\\.venv\\Scripts\\python.exe -m verifier.server --port 8080",
+    "test": ".\\.venv\\Scripts\\python.exe -m tests.run_all_tests"
+  }
+}

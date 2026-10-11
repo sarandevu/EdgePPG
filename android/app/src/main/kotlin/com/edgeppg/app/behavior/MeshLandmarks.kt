@@ -24,6 +24,8 @@ object MeshLandmarks {
     const val RIGHT_EYE_INNER = 133
     const val RIGHT_EYE_TOP = 159
     const val RIGHT_EYE_BOTTOM = 145
+    const val RIGHT_EYE_TOP_2 = 160
+    const val RIGHT_EYE_BOTTOM_2 = 144
     const val RIGHT_IRIS_CENTER = 468  // refined iris landmark (when present)
 
     // ---- Left eye (subject's left — image right in front-camera) -----
@@ -31,6 +33,8 @@ object MeshLandmarks {
     const val LEFT_EYE_INNER = 362
     const val LEFT_EYE_TOP = 386
     const val LEFT_EYE_BOTTOM = 374
+    const val LEFT_EYE_TOP_2 = 385
+    const val LEFT_EYE_BOTTOM_2 = 380
     const val LEFT_IRIS_CENTER = 473    // refined iris landmark (when present)
 
     // ---- Head pose reference points ----
@@ -38,8 +42,10 @@ object MeshLandmarks {
     const val NOSE_BRIDGE = 168          // used as the head-pose anchor
     const val CHIN = 152
     const val FOREHEAD_CENTER = 10
-    const val LEFT_MOUTH_CORNER = 61
-    const val RIGHT_MOUTH_CORNER = 291
+    const val LEFT_MOUTH_CORNER = 291   // subject's anatomical left (image right in front-camera)
+    const val RIGHT_MOUTH_CORNER = 61   // subject's anatomical right (image left in front-camera)
+    const val UPPER_LIP_CENTER = 13
+    const val LOWER_LIP_CENTER = 14
 
     // ---- Iris refinement range (ML Kit Face Mesh returns these only when
     //      the iris landmark refinement model is enabled; we guard the

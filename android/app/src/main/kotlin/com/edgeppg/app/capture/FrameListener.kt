@@ -62,4 +62,21 @@ interface FrameListener {
     fun onCameraFrame(frameNumber: Long, timestampNs: Long) {}
 
     fun onPhoneDetected(isDetected: Boolean, reason: String) {}
+
+    fun onMeshPoints(meshPoints: FloatArray, facePresent: Boolean) {}
+
+    fun onFaceCountChanged(faceCount: Int, multipleFaces: Boolean) {}
+
+    fun onOpticalResponse(score: Float) {}
+ 
+    @androidx.annotation.OptIn(androidx.camera.view.TransformExperimental::class)
+    fun onRoisUpdated(
+        rois: RoiTracker.Rois?,
+        faceBox: android.graphics.Rect?,
+        meshPoints: FloatArray,
+        frameWidth: Int,
+        frameHeight: Int,
+        rotationDegrees: Int,
+        sourceTransform: androidx.camera.view.transform.OutputTransform? = null
+    ) {}
 }

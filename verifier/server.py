@@ -42,72 +42,57 @@ DASHBOARD_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>EdgePPG — VKYC Assurance & Verification Gateway</title>
+<title>EdgePPG — VKYC Assurance &amp; Verification Gateway</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    /* Palette Tokens: Soft Peach, Warm Taupe, Medium Brown, Dark Espresso */
-    --bg-peach: #FAF3EE;
-    --bg-peach-light: #FDF9F6;
-    --bg-peach-sub: #F5EAE1;
-    --bg-card: #FFFFFF;
-    --bg-card-sub: #FBF5F0;
+    /* Simple, Clean White & Light-Blue Palette (§2, §6) */
+    --navy: #FFFFFF;              /* Primary background: White #FFFFFF */
+    --navy-surface: #FFFFFF;      /* Clean white card surface */
+    --navy-card: #FFFFFF;         /* Clean white card surface */
+    --navy-elevated: #EAF5FF;     /* Secondary surface: Very light blue #EAF5FF */
+    --navy-dim: #F0F7FF;          /* Subtle light-blue tint */
     
-    --taupe-100: #F3ECE6;
-    --taupe-200: #E7DDD4;
-    --taupe-300: #D5C6BA;
-    --taupe-400: #B8A596;
-    --taupe-500: #968273;
+    --cyan: #0284C7;              /* Primary readable brand blue */
+    --cyan-90: #0F172A;           /* Primary text: Dark readable neutral #0F172A */
+    --cyan-75: #1E293B;           /* Dark readable neutral #1E293B */
+    --cyan-55: #475569;           /* Secondary text: Readable muted neutral #475569 */
+    --cyan-40: #64748B;           /* Readable muted neutral #64748B */
+    --cyan-25: #CFE5FA;           /* Soft blue border: #CFE5FA */
+    --cyan-15: #EAF5FF;           /* Secondary surface: Very light blue #EAF5FF */
+    --cyan-08: #F1F8FE;           /* Subtle highlight tint */
+    --cyan-04: #F8FAFC;           /* Ultra subtle surface */
     
-    --brown-medium: #7A4F32;
-    --brown-medium-hover: #684128;
-    --brown-espresso: #25160E;
-    --brown-espresso-light: #3A2317;
-
-    --border-card: #EADFD5;
-    --border-sub: #F0E6DE;
-    --border-hover: #D4C5B9;
-    --border-focus: #7A4F32;
-
-    --primary-btn: linear-gradient(135deg, #7A4F32 0%, #54341F 100%);
-    --primary-btn-hover: linear-gradient(135deg, #684128 0%, #432816 100%);
-
-    --accent-emerald: #2E7D5B;
-    --accent-emerald-bg: #EAF7EE;
-    --accent-emerald-border: #BCE7CA;
-
-    --accent-amber: #B45309;
-    --accent-amber-bg: #FEF3C7;
-    --accent-amber-border: #FDE68A;
-
-    --accent-coral: #C2410C;
-    --accent-coral-bg: #FEE2E2;
-    --accent-coral-border: #FECACA;
-
-    --text-main: #25160E;
-    --text-muted: #6E5A4E;
-    --text-dim: #998375;
+    --border-subtle: #CFE5FA;     /* Soft blue borders: #CFE5FA */
+    --border-strong: #A6D2F9;     /* Subtle blue border */
+    --border-active: #77BFFF;     /* Light-blue interactive accents: #77BFFF */
+    
+    --text-primary: #0F172A;      /* Primary text: Dark readable neutral #0F172A */
+    --text-high: #0F172A;         /* Primary text */
+    --text-med: #475569;          /* Secondary text: Muted neutral tone */
+    --text-dim: #64748B;          /* Secondary text */
+    --text-muted: #94A3B8;        /* Subtle metadata */
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'Outfit', system-ui, -apple-system, sans-serif;
     font-size: 13px;
-    background-color: var(--bg-peach);
+    background-color: #FFFFFF;
     background-image: 
-      radial-gradient(at 0% 0%, rgba(245, 234, 225, 0.9) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(242, 222, 206, 0.6) 0px, transparent 50%),
-      radial-gradient(at 50% 100%, rgba(235, 215, 198, 0.35) 0px, transparent 50%);
+      linear-gradient(to right, rgba(207, 229, 250, 0.35) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(207, 229, 250, 0.35) 1px, transparent 1px);
+    background-size: 36px 36px;
     background-attachment: fixed;
-    color: var(--text-main);
+    color: var(--text-primary);
     min-height: 100vh;
     padding-bottom: 60px;
     letter-spacing: -0.01em;
   }
   header {
-    background: var(--brown-espresso);
-    border-bottom: 1px solid var(--brown-espresso-light);
+    background: #FFFFFF;
+    border-bottom: 1px solid var(--border-subtle);
     padding: 16px 36px;
     display: flex;
     justify-content: space-between;
@@ -115,41 +100,44 @@ DASHBOARD_HTML = """<!doctype html>
     position: sticky;
     top: 0;
     z-index: 100;
-    box-shadow: 0 4px 20px rgba(37, 22, 14, 0.12);
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
   }
   .brand { display: flex; align-items: center; gap: 14px; }
   .brand-logo {
-    width: 38px; height: 38px; border-radius: 12px;
-    background: linear-gradient(135deg, #8B5E3C, #D4C5B9);
+    width: 38px; height: 38px; border-radius: 8px;
+    background: #77BFFF;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 4px 12px rgba(37, 22, 14, 0.3);
-    font-weight: 800; color: #FFF; font-size: 16px;
+    box-shadow: 0 2px 8px rgba(119, 191, 255, 0.35);
+    font-weight: 800; color: #0F172A; font-size: 16px;
     letter-spacing: 0.04em;
   }
-  .brand-title { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: #FAF3EE; display: flex; align-items: center; gap: 10px; }
+  .brand-title {
+    font-size: 17px; font-weight: 700; letter-spacing: -0.01em;
+    color: var(--cyan); display: flex; align-items: center; gap: 10px;
+  }
   .brand-version {
     font-size: 11px; font-weight: 600; font-family: 'JetBrains Mono', monospace;
-    background: rgba(250, 243, 238, 0.12); padding: 2px 8px; border-radius: 12px;
-    color: #E6DDD5; border: 1px solid rgba(250, 243, 238, 0.2);
+    background: var(--cyan-08); padding: 2px 8px; border-radius: 6px;
+    color: var(--cyan-75); border: 1px solid var(--border-subtle);
   }
   .header-actions { display: flex; align-items: center; gap: 14px; }
   .enclave-badge {
     display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700;
-    color: #D1FAE5; background: rgba(46, 125, 91, 0.25); border: 1px solid rgba(46, 125, 91, 0.4);
-    padding: 5px 12px; border-radius: 16px; letter-spacing: 0.04em;
+    color: var(--cyan); background: var(--cyan-08); border: 1px solid var(--border-strong);
+    padding: 5px 12px; border-radius: 6px; letter-spacing: 0.04em;
   }
   .live-dot {
-    width: 7px; height: 7px; border-radius: 50%; background: #34D399;
-    box-shadow: 0 0 8px #34D399; animation: pulseGlow 2s infinite;
+    width: 7px; height: 7px; border-radius: 50%; background: var(--cyan);
+    box-shadow: 0 0 8px var(--cyan); animation: pulseGlow 2s infinite;
   }
   #status {
     font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px;
-    padding: 6px 14px; border-radius: 16px; transition: all 0.3s ease;
+    padding: 6px 14px; border-radius: 6px; transition: all 0.3s ease;
   }
-  #status.ok { background: rgba(46, 125, 91, 0.25); color: #6EE7B7; border: 1px solid rgba(46, 125, 91, 0.5); }
-  #status.bad { background: rgba(239, 68, 68, 0.25); color: #FCA5A5; border: 1px solid rgba(239, 68, 68, 0.5); }
-  #status.uncertain { background: rgba(245, 158, 11, 0.25); color: #FDE68A; border: 1px solid rgba(245, 158, 11, 0.5); }
-  #status.idle { background: rgba(250, 243, 238, 0.12); color: #D4C5B9; border: 1px solid rgba(250, 243, 238, 0.25); }
+  #status.ok { background: #EAF5FF; color: #047857; border: 1px solid #34D399; font-weight: 800; }
+  #status.bad { background: #FEF2F2; color: #B91C1C; border: 1px solid #EF4444; font-weight: 800; }
+  #status.uncertain { background: #FFFBEB; color: #B45309; border: 1px solid #F59E0B; }
+  #status.idle { background: #EAF5FF; color: #475569; border: 1px solid #CFE5FA; }
 
   .container { max-width: 1440px; margin: 0 auto; padding: 0 32px; }
 
@@ -160,19 +148,19 @@ DASHBOARD_HTML = """<!doctype html>
   }
   @media (max-width: 900px) { .kpi-bar { grid-template-columns: repeat(2, 1fr); } }
   .kpi-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-card); border-radius: 18px;
+    background: var(--navy-surface);
+    border: 1px solid var(--border-subtle); border-radius: 12px;
     padding: 18px 22px; display: flex; align-items: center; justify-content: space-between;
-    box-shadow: 0 2px 14px rgba(70, 45, 30, 0.04);
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
     transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
   }
   .kpi-card:hover {
     transform: translateY(-2px);
-    border-color: var(--border-hover);
-    box-shadow: 0 6px 20px rgba(70, 45, 30, 0.08);
+    border-color: var(--border-strong);
+    box-shadow: 0 6px 20px rgba(0, 212, 255, 0.08);
   }
   .kpi-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); font-weight: 700; margin-bottom: 4px; }
-  .kpi-value { font-size: 17px; font-weight: 700; color: var(--text-main); }
+  .kpi-value { font-size: 16px; font-weight: 700; color: var(--cyan); }
 
   /* Hero Section: 3-Column Console */
   .hero-console {
@@ -185,63 +173,63 @@ DASHBOARD_HTML = """<!doctype html>
   @media (max-width: 768px) { .hero-console { grid-template-columns: 1fr; } }
 
   .console-panel {
-    background: var(--bg-card);
-    border: 1px solid var(--border-card);
-    border-radius: 20px;
-    padding: 24px;
+    background: var(--navy-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    padding: 22px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    box-shadow: 0 4px 20px rgba(70, 45, 30, 0.05);
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
     position: relative;
     overflow: hidden;
   }
   .panel-header {
     display: flex; align-items: center; justify-content: space-between;
     font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
-    color: var(--text-muted); margin-bottom: 16px; padding-bottom: 10px;
-    border-bottom: 1px solid var(--border-sub);
+    color: var(--text-med); margin-bottom: 16px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   /* Applicant Card */
   .applicant-hero { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
   .applicant-avatar {
-    width: 52px; height: 52px; border-radius: 16px;
-    background: linear-gradient(135deg, #7A4F32, #54341F);
-    border: 2px solid #D4C5B9;
+    width: 50px; height: 50px; border-radius: 10px;
+    background: var(--cyan-15);
+    border: 1px solid var(--border-strong);
     display: flex; align-items: center; justify-content: center;
-    font-size: 20px; font-weight: 800; color: #FAF3EE;
-    box-shadow: 0 4px 14px rgba(84, 52, 31, 0.2);
+    font-size: 20px; font-weight: 800; color: var(--cyan);
+    box-shadow: 0 0 14px rgba(0, 212, 255, 0.15);
   }
-  .applicant-name { font-size: 17px; font-weight: 700; color: var(--text-main); line-height: 1.2; }
-  .applicant-ref { font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--brown-medium); margin-top: 3px; font-weight: 600; }
+  .applicant-name { font-size: 17px; font-weight: 700; color: var(--cyan); line-height: 1.2; }
+  .applicant-ref { font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--text-med); margin-top: 3px; font-weight: 600; }
   .applicant-meta-row { display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; }
   .meta-title { color: var(--text-dim); font-size: 11px; font-weight: 600; text-transform: uppercase; }
-  .meta-val { font-weight: 600; color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .meta-val { font-weight: 600; color: var(--text-high); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
 
   /* Hero Center: Confidence & Result */
   .result-card {
-    background: #FFFFFF;
-    border: 2px solid var(--border-card);
-    border-radius: 20px;
-    padding: 24px;
+    background: #EAF5FF;
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    padding: 22px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 24px rgba(70, 45, 30, 0.05);
+    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.04);
   }
   .result-card.live-state {
-    border-color: #2E7D5B;
-    box-shadow: 0 4px 28px rgba(46, 125, 91, 0.12);
+    border: 2px solid #34D399;
+    box-shadow: 0 4px 16px rgba(52, 211, 153, 0.15);
   }
   .result-card.uncertain-state {
-    border-color: #B45309;
-    box-shadow: 0 4px 28px rgba(180, 83, 9, 0.12);
+    border: 2px solid #F59E0B;
+    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.12);
   }
   .result-card.spoof-state {
-    border-color: #C2410C;
-    box-shadow: 0 4px 28px rgba(194, 65, 12, 0.12);
+    border: 2px dashed #EF4444;
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.15);
   }
   .hero-verdict-grid {
     display: grid;
@@ -260,41 +248,41 @@ DASHBOARD_HTML = """<!doctype html>
     position: absolute; top: 0; left: 0; width: 110px; height: 110px;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
   }
-  .conf-percent { font-size: 24px; font-weight: 800; color: var(--text-main); line-height: 1; }
+  .conf-percent { font-size: 24px; font-weight: 800; color: var(--cyan); line-height: 1; }
   .conf-sublabel { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-dim); margin-top: 3px; }
   .conf-plive-badge {
     margin-top: 8px; font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
-    color: var(--brown-medium); background: var(--bg-peach-sub); padding: 2px 8px; border-radius: 10px;
-    border: 1px solid var(--border-card);
+    color: var(--cyan); background: var(--cyan-08); padding: 2px 8px; border-radius: 6px;
+    border: 1px solid var(--border-subtle);
   }
 
   .verdict-info-box { display: flex; flex-direction: column; justify-content: center; }
   .res-pill {
     align-self: flex-start;
-    padding: 5px 14px; border-radius: 20px; font-weight: 800; font-size: 12px; letter-spacing: 0.08em;
+    padding: 5px 14px; border-radius: 6px; font-weight: 800; font-size: 12px; letter-spacing: 0.08em;
     display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px;
   }
-  .res-pill.live { background: var(--accent-emerald-bg); color: var(--accent-emerald); border: 1px solid var(--accent-emerald-border); }
-  .res-pill.uncertain { background: var(--accent-amber-bg); color: var(--accent-amber); border: 1px solid var(--accent-amber-border); }
-  .res-pill.spoof { background: var(--accent-coral-bg); color: var(--accent-coral); border: 1px solid var(--accent-coral-border); }
-  .res-pill.standby { background: var(--bg-peach-sub); color: var(--text-muted); border: 1px solid var(--border-card); }
+  .res-pill.live { background: var(--cyan); color: var(--navy); border: 1px solid var(--cyan); }
+  .res-pill.uncertain { background: var(--cyan-15); color: var(--cyan-90); border: 1px dotted var(--cyan); }
+  .res-pill.spoof { background: var(--navy); color: var(--cyan); border: 2px dashed var(--cyan); }
+  .res-pill.standby { background: var(--cyan-04); color: var(--cyan-55); border: 1px solid var(--border-subtle); }
 
-  .res-title { font-size: 19px; font-weight: 800; color: var(--text-main); letter-spacing: -0.02em; margin-bottom: 4px; line-height: 1.25; }
-  .res-sub { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px; }
+  .res-title { font-size: 18px; font-weight: 800; color: var(--cyan); letter-spacing: -0.01em; margin-bottom: 4px; line-height: 1.25; }
+  .res-sub { font-size: 12px; color: var(--text-med); line-height: 1.5; margin-bottom: 12px; }
 
   .verdict-footer-meta {
     display: flex; align-items: center; gap: 16px; font-size: 11px; color: var(--text-dim);
-    padding-top: 10px; border-top: 1px solid var(--border-sub);
+    padding-top: 10px; border-top: 1px solid var(--border-subtle);
   }
 
   /* Operational Telemetry Matrix */
   .telemetry-row {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 9px 0; border-bottom: 1px solid var(--border-sub); font-size: 12px;
+    padding: 9px 0; border-bottom: 1px solid var(--border-subtle); font-size: 12px;
   }
   .telemetry-row:last-child { border-bottom: none; }
   .tel-lbl { font-weight: 600; color: var(--text-dim); text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; }
-  .tel-val { font-weight: 700; color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .tel-val { font-weight: 700; color: var(--cyan); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
 
   /* Evidence Modalities (6-Card Grid) */
   .evidence-section { margin-top: 22px; }
@@ -302,8 +290,8 @@ DASHBOARD_HTML = """<!doctype html>
     display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
   }
   .section-heading {
-    font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
-    color: var(--text-main); display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--cyan); display: flex; align-items: center; gap: 8px;
   }
   .evidence-grid {
     display: grid;
@@ -315,75 +303,75 @@ DASHBOARD_HTML = """<!doctype html>
 
   .tech-toggle-bar { margin-top: 22px; }
   .btn-accordion {
-    width: 100%; background: #FFFFFF; border: 1px solid var(--border-card);
-    border-radius: 14px; padding: 14px 20px; color: var(--text-main); font-size: 13px; font-weight: 700;
+    width: 100%; background: var(--navy-surface); border: 1px solid var(--border-subtle);
+    border-radius: 10px; padding: 13px 18px; color: var(--cyan); font-size: 13px; font-weight: 700;
     display: flex; justify-content: space-between; align-items: center; cursor: pointer;
     transition: all 0.2s ease;
-    box-shadow: 0 2px 10px rgba(70, 45, 30, 0.04);
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
   }
-  .btn-accordion:hover { background: var(--bg-peach-light); border-color: var(--border-hover); }
+  .btn-accordion:hover { background: var(--navy-elevated); border-color: var(--border-strong); }
   .tech-panel {
-    background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 18px;
-    padding: 22px; margin-top: 10px; box-shadow: 0 4px 20px rgba(70, 45, 30, 0.05);
+    background: var(--navy-surface); border: 1px solid var(--border-subtle); border-radius: 12px;
+    padding: 22px; margin-top: 10px; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
   }
   .tech-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 11px; margin-top: 10px; }
   .tech-table th {
-    background: var(--bg-peach-sub); padding: 9px 12px; font-size: 10px; text-transform: uppercase;
-    letter-spacing: 0.05em; color: var(--text-muted); border-bottom: 1px solid var(--border-card); text-align: left;
+    background: var(--cyan-08); padding: 9px 12px; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--cyan); border-bottom: 1px solid var(--border-subtle); text-align: left;
   }
-  .tech-table td { padding: 8px 12px; border-bottom: 1px solid var(--border-sub); font-family: 'JetBrains Mono', monospace; color: var(--text-main); }
-  .badge-sentinel { background: var(--bg-peach-sub); color: var(--text-dim); border: 1px solid var(--border-card); padding: 2px 6px; border-radius: 6px; font-size: 9px; font-weight: 700; }
-  .badge-active { background: var(--accent-emerald-bg); color: var(--accent-emerald); border: 1px solid var(--accent-emerald-border); padding: 2px 6px; border-radius: 6px; font-size: 9px; font-weight: 700; }
+  .tech-table td { padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); font-family: 'JetBrains Mono', monospace; color: var(--text-high); }
+  .badge-sentinel { background: var(--cyan-04); color: var(--cyan-40); border: 1px solid var(--border-subtle); padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; }
+  .badge-active { background: var(--cyan-15); color: var(--cyan); border: 1px solid var(--border-strong); padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; }
 
   .evidence-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-card);
-    border-radius: 18px;
-    padding: 20px;
+    background: var(--navy-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 18px;
     display: flex; flex-direction: column; justify-content: space-between;
     transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-    box-shadow: 0 2px 14px rgba(70, 45, 30, 0.04);
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
   }
   .evidence-card:hover {
     transform: translateY(-2px);
-    border-color: var(--border-hover);
-    box-shadow: 0 6px 20px rgba(70, 45, 30, 0.08);
+    border-color: var(--border-strong);
+    box-shadow: 0 6px 20px rgba(0, 212, 255, 0.08);
   }
   .ev-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
-  .ev-name { font-size: 13px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 6px; }
+  .ev-name { font-size: 13px; font-weight: 700; color: var(--cyan); display: flex; align-items: center; gap: 6px; }
   .ev-badge {
-    font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+    font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px;
     text-transform: uppercase; letter-spacing: 0.04em;
   }
-  .ev-badge.good { background: var(--accent-emerald-bg); color: var(--accent-emerald); border: 1px solid var(--accent-emerald-border); }
-  .ev-badge.warn { background: var(--accent-amber-bg); color: var(--accent-amber); border: 1px solid var(--accent-amber-border); }
-  .ev-badge.dim { background: var(--bg-peach-sub); color: var(--text-muted); border: 1px solid var(--border-card); }
+  .ev-badge.good { background: var(--cyan-15); color: var(--cyan); border: 1px solid var(--border-strong); }
+  .ev-badge.warn { background: var(--cyan-08); color: var(--cyan-75); border: 1px dashed var(--border-strong); }
+  .ev-badge.dim { background: var(--cyan-04); color: var(--cyan-40); border: 1px solid var(--border-subtle); }
 
   .ev-metrics { margin-bottom: 12px; }
   .ev-metric-item { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 5px; }
   .ev-metric-lbl { color: var(--text-dim); }
-  .ev-metric-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-main); max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ev-metric-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--cyan); max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .meter-bar-bg { width: 100%; height: 6px; background: var(--bg-peach-sub); border-radius: 4px; overflow: hidden; margin-top: 6px; }
-  .meter-bar-fill { height: 100%; background: linear-gradient(90deg, #B8A596, #7A4F32); border-radius: 4px; transition: width 0.6s ease; }
+  .meter-bar-bg { width: 100%; height: 5px; background: var(--cyan-08); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .meter-bar-fill { height: 100%; background: var(--cyan); border-radius: 3px; transition: width 0.6s ease; }
 
-  .ev-desc { font-size: 11px; color: var(--text-muted); line-height: 1.4; border-top: 1px solid var(--border-sub); padding-top: 8px; margin-top: auto; }
+  .ev-desc { font-size: 11px; color: var(--text-med); line-height: 1.4; border-top: 1px solid var(--border-subtle); padding-top: 8px; margin-top: auto; }
 
   /* Security & Integrity Banner */
   .security-bar {
     margin-top: 20px;
-    background: #FFFFFF;
-    border: 1px solid var(--border-card);
-    border-radius: 16px;
+    background: var(--navy-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
     padding: 16px 24px;
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 14px;
-    box-shadow: 0 2px 14px rgba(70, 45, 30, 0.04);
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
   }
   @media (max-width: 900px) { .security-bar { grid-template-columns: repeat(2, 1fr); } }
-  .sec-item { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; color: var(--text-main); }
-  .sec-check { color: #2E7D5B; font-weight: 800; font-size: 13px; }
+  .sec-item { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; color: var(--text-high); }
+  .sec-check { color: var(--cyan); font-weight: 800; font-size: 13px; }
 
   /* Operations: 2-Column Lower Layout */
   .ops-grid {
@@ -395,167 +383,164 @@ DASHBOARD_HTML = """<!doctype html>
   @media (max-width: 1080px) { .ops-grid { grid-template-columns: 1fr; } }
 
   .ops-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-card);
-    border-radius: 20px;
-    padding: 24px;
-    box-shadow: 0 4px 20px rgba(70, 45, 30, 0.05);
+    background: var(--navy-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    padding: 22px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
   }
   .ops-card h2 {
-    font-size: 16px; font-weight: 700; color: var(--text-main);
+    font-size: 15px; font-weight: 700; color: var(--cyan);
     margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
     letter-spacing: -0.01em;
   }
-  .hint { font-size: 12px; color: var(--text-muted); margin-bottom: 18px; line-height: 1.5; }
+  .hint { font-size: 12px; color: var(--text-med); margin-bottom: 18px; line-height: 1.5; }
 
   .form label {
     display: block; margin-bottom: 14px; font-size: 11px; font-weight: 700;
-    color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em;
   }
   .form input, textarea, select {
-    width: 100%; margin-top: 6px; background: #FDF9F6;
-    color: var(--text-main); border: 1px solid var(--border-card);
-    border-radius: 12px; padding: 11px 14px; font-size: 13px;
+    width: 100%; margin-top: 6px; background: var(--navy-card);
+    color: var(--text-high); border: 1px solid var(--border-strong);
+    border-radius: 8px; padding: 10px 14px; font-size: 13px;
     font-family: inherit; transition: all 0.2s ease;
   }
   .form input:focus, textarea:focus, select:focus {
-    outline: none; border-color: var(--border-focus);
-    box-shadow: 0 0 0 3px rgba(122, 79, 50, 0.15);
-    background: #FFFFFF;
+    outline: none; border-color: var(--border-active);
+    box-shadow: 0 0 0 3px var(--cyan-15);
+    background: var(--navy-elevated);
   }
   textarea { font-family: 'JetBrains Mono', monospace; font-size: 12px; resize: vertical; line-height: 1.5; }
 
   .btn-row { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
   button {
-    background: var(--primary-btn);
-    color: #FAF3EE; font-weight: 700; font-size: 12px;
-    border: 0; padding: 11px 22px; border-radius: 12px;
+    background: #77BFFF;
+    color: #0F172A; font-weight: 700; font-size: 12px;
+    border: 1px solid #CFE5FA; padding: 10px 20px; border-radius: 8px;
     cursor: pointer; transition: all 0.2s ease;
-    box-shadow: 0 4px 14px rgba(84, 52, 31, 0.2);
+    box-shadow: 0 2px 8px rgba(119, 191, 255, 0.25);
     display: inline-flex; align-items: center; gap: 8px;
   }
   button:hover {
-    background: var(--primary-btn-hover);
+    background: #5EB2FC;
     transform: translateY(-1px);
-    box-shadow: 0 6px 18px rgba(84, 52, 31, 0.28);
+    box-shadow: 0 4px 12px rgba(119, 191, 255, 0.35);
   }
   button:active { transform: translateY(0); }
 
   .btn-ghost {
-    background: #FDF8F5; color: var(--text-main);
-    border: 1px solid var(--border-card); box-shadow: none; font-weight: 600;
+    background: #FFFFFF; color: #0F172A;
+    border: 1px solid var(--border-subtle); box-shadow: none; font-weight: 600;
   }
-  .btn-ghost:hover { background: #F5EAE1; color: var(--brown-espresso); border-color: var(--taupe-300); transform: translateY(-1px); }
+  .btn-ghost:hover { background: #EAF5FF; color: #0284C7; border-color: #77BFFF; transform: translateY(-1px); }
 
   .btn-sm {
     padding: 6px 12px; font-size: 11px; font-weight: 600;
-    border-radius: 8px; background: var(--bg-peach-sub);
-    color: var(--brown-medium); border: 1px solid var(--border-card);
+    border-radius: 6px; background: #EAF5FF;
+    color: #0284C7; border: 1px solid var(--border-subtle);
     cursor: pointer; transition: all 0.2s;
   }
-  .btn-sm:hover { background: var(--brown-medium); color: #FAF3EE; border-color: var(--brown-medium); transform: translateY(-1px); }
+  .btn-sm:hover { background: #77BFFF; color: #0F172A; border-color: #77BFFF; transform: translateY(-1px); }
 
   .waitbanner {
-    background: #FEF3C7;
-    border: 1px solid #FDE68A;
-    border-radius: 14px; padding: 12px 18px; margin-bottom: 18px;
-    font-size: 12px; font-weight: 600; color: #92400E;
+    background: var(--cyan-08);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px; padding: 12px 18px; margin-bottom: 18px;
+    font-size: 12px; font-weight: 600; color: var(--cyan);
     display: flex; align-items: center; gap: 10px;
   }
 
   table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; }
   th {
-    background: var(--bg-peach-sub);
-    border-bottom: 1px solid var(--border-card);
-    padding: 11px 14px; text-align: left;
+    background: var(--cyan-08);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 10px 14px; text-align: left;
     font-size: 10px; text-transform: uppercase; font-weight: 700;
-    color: var(--text-muted); letter-spacing: 0.06em;
+    color: var(--cyan); letter-spacing: 0.06em;
   }
-  th:first-child { border-top-left-radius: 10px; border-bottom-left-radius: 10px; }
-  th:last-child { border-top-right-radius: 10px; border-bottom-right-radius: 10px; }
+  th:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+  th:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
   td {
-    border-bottom: 1px solid var(--border-sub);
-    padding: 12px 14px; vertical-align: middle; font-size: 12px;
-    color: var(--text-main);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 11px 14px; vertical-align: middle; font-size: 12px;
+    color: var(--text-high);
   }
-  tr:hover td { background: rgba(212, 197, 185, 0.12); }
+  tr:hover td { background: var(--cyan-04); }
 
-  .st { padding: 3px 10px; border-radius: 14px; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; }
-  .st-SCHEDULED { background: var(--bg-peach-sub); color: var(--text-muted); border: 1px solid var(--border-card); }
-  .st-WAITING { background: var(--accent-amber-bg); color: var(--accent-amber); border: 1px solid var(--accent-amber-border); }
-  .st-CONNECTED { background: var(--accent-emerald-bg); color: var(--accent-emerald); border: 1px solid var(--accent-emerald-border); }
-  .st-COMPLETED { background: #F0E6DE; color: var(--brown-medium); border: 1px solid #D9CDC3; }
-  .st-FAILED { background: var(--accent-coral-bg); color: var(--accent-coral); border: 1px solid var(--accent-coral-border); }
+  .st { padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; }
+  .st-SCHEDULED { background: var(--cyan-04); color: var(--cyan-55); border: 1px solid var(--border-subtle); }
+  .st-WAITING { background: var(--cyan-08); color: var(--cyan-75); border: 1px dashed var(--border-strong); }
+  .st-CONNECTED { background: var(--cyan); color: var(--navy); font-weight: 800; border: 1px solid var(--cyan); }
+  .st-COMPLETED { background: var(--cyan-15); color: var(--cyan); border: 1px solid var(--border-strong); }
+  .st-FAILED { background: var(--navy); color: var(--cyan); border: 2px dashed var(--cyan); }
 
   .mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; white-space: nowrap; }
   .avatar-chip {
-    width: 28px; height: 28px; border-radius: 10px; background: linear-gradient(135deg, #7A4F32, #54341F);
+    width: 26px; height: 26px; border-radius: 6px; background: var(--cyan-15);
     display: inline-flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 700; color: #FAF3EE; margin-right: 8px; vertical-align: middle;
-    border: 1px solid #D4C5B9;
+    font-size: 11px; font-weight: 700; color: var(--cyan); margin-right: 8px; vertical-align: middle;
+    border: 1px solid var(--border-strong);
   }
 
   @keyframes pulseGlow {
-    0%, 100% { box-shadow: 0 0 0 rgba(52, 211, 153, 0); }
-    50% { box-shadow: 0 0 14px rgba(52, 211, 153, 0.6); }
+    0%, 100% { box-shadow: 0 0 0 rgba(0, 212, 255, 0); }
+    50% { box-shadow: 0 0 14px rgba(0, 212, 255, 0.7); }
   }
 </style>
 </head><body>
 <header>
   <div class="brand">
     <div class="brand-logo">EP</div>
-    <div>
-      <div class="brand-title">EdgePPG Assurance Gateway <span class="brand-version">__VER__</span></div>
-      <div style="font-size:11px;color:rgba(250,243,238,0.7)">Hardware-Signed Zero-Knowledge VKYC Verification Console</div>
-    </div>
+    <div class="brand-title">EdgePPG Assurance Gateway <span class="brand-version">__VER__</span></div>
   </div>
   <div class="header-actions">
     <div class="enclave-badge"><span class="live-dot"></span> HARDWARE ENCLAVE ACTIVE</div>
-    <div id="status" class="idle">ENCLAVE READY</div>
+    <span id="status" class="idle">Offline · Awaiting Intake</span>
   </div>
 </header>
 
 <div class="container">
-  <!-- Operational Metrics Bar -->
+  <!-- KPI Metrics Strip -->
   <div class="kpi-bar">
     <div class="kpi-card">
       <div>
         <div class="kpi-label">Gateway Engine</div>
-        <div class="kpi-value" style="color:var(--brown-medium)">PORT 8080 · LISTENING</div>
+        <div class="kpi-value">PORT 8080 · LISTENING</div>
       </div>
-      <div style="font-size:22px">⚡</div>
+      <span style="font-size:20px;color:var(--cyan)">⚡</span>
     </div>
     <div class="kpi-card">
       <div>
         <div class="kpi-label">Hardware Trust</div>
-        <div class="kpi-value" style="color:var(--accent-emerald)">ECDSA secp256r1</div>
+        <div class="kpi-value">ECDSA secp256r1</div>
       </div>
-      <div style="font-size:22px">🔐</div>
+      <span style="font-size:20px;color:var(--cyan)">🛡️</span>
     </div>
     <div class="kpi-card">
       <div>
         <div class="kpi-label">Active Sessions</div>
         <div class="kpi-value" id="statCalls">0 Total</div>
       </div>
-      <div style="font-size:22px">📋</div>
+      <span style="font-size:20px;color:var(--cyan)">👥</span>
     </div>
     <div class="kpi-card">
       <div>
         <div class="kpi-label">Audit Receipts</div>
         <div class="kpi-value" id="statLogs">0 Verified</div>
       </div>
-      <div style="font-size:22px">🛡️</div>
+      <span style="font-size:20px;color:var(--cyan)">📜</span>
     </div>
   </div>
 
-  <!-- Hero Console: 1. Applicant Profile | 2. FINAL CONFIDENCE & RESULT | 3. Operational Matrix -->
+  <!-- Hero Section: 3-Column Operator Console -->
   <div class="hero-console">
-    <!-- Panel 1: Applicant Profile -->
+    <!-- Panel 1: Active Applicant Details -->
     <div class="console-panel" id="applicantPanel">
       <div>
         <div class="panel-header">
-          <span>Applicant Profile</span>
-          <span style="color:var(--accent-emerald);font-weight:700">● Live Enclave</span>
+          <span>Active Subject</span>
+          <span class="mono" style="color:var(--cyan)">LIVE ATTESTATION</span>
         </div>
         <div class="applicant-hero">
           <div class="applicant-avatar" id="activeAvatar">A</div>
@@ -565,97 +550,86 @@ DASHBOARD_HTML = """<!doctype html>
           </div>
         </div>
         <div class="applicant-meta-row">
-          <span class="meta-title">Session ID</span>
-          <span class="meta-val" id="resCallId" style="color:var(--brown-medium)">call-20260927-011446-37e5</span>
+          <span class="meta-title">Call ID:</span>
+          <span class="meta-val" id="resCallId">001</span>
         </div>
         <div class="applicant-meta-row">
-          <span class="meta-title">Scheduled</span>
-          <span class="meta-val" id="activeSchedTime">Direct Session</span>
+          <span class="meta-title">Scheduled:</span>
+          <span class="meta-val" id="activeSchedTime">10:00 AM Today</span>
         </div>
       </div>
-      <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border-sub)">
-        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--accent-emerald);font-weight:700">
-          <span>✓</span> <span>Android Keystore Authenticated</span>
-        </div>
+      <div style="font-size:11px;color:var(--text-dim);border-top:1px solid var(--border-subtle);padding-top:10px">
+        Zero-Knowledge Verification · No raw face video stored
       </div>
     </div>
 
-    <!-- Panel 2: FINAL CONFIDENCE & RESULT (HERO) -->
+    <!-- Panel 2: Result & Confidence Hero -->
     <div class="result-card" id="latestResultCard">
-      <div>
-        <div class="panel-header" style="border-bottom:1px solid var(--border-sub)">
-          <span>Verification Attestation & Confidence</span>
-          <span class="mono" id="resTime" style="color:var(--text-muted)">Just now</span>
+      <div class="panel-header" style="border-bottom:1px solid var(--border-subtle)">
+        <span>Attestation Outcome</span>
+        <span class="mono" id="resTime">—</span>
+      </div>
+      <div class="hero-verdict-grid">
+        <div class="conf-ring-box">
+          <svg class="conf-ring-svg" width="110" height="110">
+            <circle cx="55" cy="55" r="45" stroke="var(--cyan-15)" stroke-width="8" fill="transparent" />
+            <circle id="confRing" cx="55" cy="55" r="45" stroke="var(--cyan)" stroke-width="8" fill="transparent"
+              stroke-dasharray="282.743" stroke-dashoffset="282.743" stroke-linecap="round" style="transition: all 0.6s ease;" />
+          </svg>
+          <div class="conf-text-wrap">
+            <div class="conf-percent" id="confPercent">—%</div>
+            <div class="conf-sublabel">Evidence</div>
+          </div>
+          <div class="conf-plive-badge" id="confPLive">P(LIVE) —</div>
         </div>
-        <div class="hero-verdict-grid">
-          <!-- Radial Confidence Progress Indicator -->
-          <div class="conf-ring-box">
-            <svg class="conf-ring-svg" width="110" height="110" viewBox="0 0 110 110">
-              <circle cx="55" cy="55" r="45" fill="none" stroke="#F0E5DC" stroke-width="9" />
-              <circle id="confRing" cx="55" cy="55" r="45" fill="none" stroke="#2E7D5B" stroke-width="9"
-                      stroke-dasharray="282.743" stroke-dashoffset="0"
-                      stroke-linecap="round" style="transition: stroke-dashoffset 0.8s ease, stroke 0.4s ease;" />
-            </svg>
-            <div class="conf-text-wrap">
-              <div class="conf-percent" id="confPercent">92%</div>
-              <div class="conf-sublabel">Evidence</div>
-            </div>
-            <div class="conf-plive-badge" id="confPLive">P(LIVE) 0.92</div>
-          </div>
-
-          <!-- Unmistakable Final Verdict & Explanation -->
-          <div class="verdict-info-box">
-            <span id="resBadge" class="res-pill live">LIVE APPLICANT</span>
-            <div class="res-title" id="resTitle">Identity Verified & Attestation Confirmed</div>
-            <div class="res-sub" id="resSub">Real biometric liveness and hardware enclave signature cryptographically verified against the provisioned secp256r1 root.</div>
-          </div>
+        <div class="verdict-info-box">
+          <div class="res-pill standby" id="resBadge">Standby</div>
+          <div class="res-title" id="resTitle">Awaiting Session Verification</div>
+          <div class="res-sub" id="resSub">The mobile application has not submitted biometric attestation yet.</div>
         </div>
       </div>
-
       <div class="verdict-footer-meta">
-        <div><strong>Receipt:</strong> <span class="mono" id="resReceipt" style="color:var(--brown-medium)">receipt.json</span></div>
-        <div style="margin-left:auto"><strong>Policy:</strong> <span style="color:var(--accent-emerald)">Threshold ≥ 0.70</span></div>
+        <span>Receipt: <strong id="resReceipt" class="mono" style="color:var(--cyan)">—</strong></span>
       </div>
     </div>
 
-    <!-- Panel 3: Operational Status Matrix -->
+    <!-- Panel 3: Operational Telemetry Matrix -->
     <div class="console-panel">
-      <div class="panel-header">
-        <span>Operational Telemetry</span>
-        <span style="color:var(--brown-medium)">4/4 Nodes OK</span>
-      </div>
       <div>
-        <div class="telemetry-row">
-          <span class="tel-lbl">Call State</span>
-          <span class="tel-val" id="opCall" style="color:var(--accent-emerald)">CONNECTED</span>
+        <div class="panel-header">
+          <span>Real-time Telemetry</span>
+          <span class="mono" style="color:var(--cyan)">iQOO 15</span>
         </div>
         <div class="telemetry-row">
-          <span class="tel-lbl">Transport</span>
-          <span class="tel-val" style="color:var(--brown-medium)">Direct HTTP / Wi-Fi</span>
+          <span class="tel-lbl">Selected Call:</span>
+          <span class="tel-val" id="opCall">001</span>
         </div>
         <div class="telemetry-row">
-          <span class="tel-lbl">Verification</span>
-          <span class="tel-val" id="opVerif" style="color:var(--taupe-500)">COMPLETED</span>
+          <span class="tel-lbl">Enclave Attest:</span>
+          <span class="tel-val" id="opVerif">SECP256R1 ✓</span>
         </div>
         <div class="telemetry-row">
-          <span class="tel-lbl">Root Key</span>
-          <span class="tel-val" style="color:var(--accent-emerald)">secp256r1 Valid ✓</span>
+          <span class="tel-lbl">rPPG Frame Rate:</span>
+          <span class="tel-val">30.0 FPS</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="tel-lbl">Hardware Lock:</span>
+          <span class="tel-val">AE / AWB CONVERGED</span>
         </div>
       </div>
-      <div style="margin-top:16px;padding-top:10px;border-top:1px solid var(--border-sub);font-size:11px;color:var(--text-dim)">
-        Zero-Knowledge Cryptographic Gate
+      <div style="font-size:11px;color:var(--text-dim);border-top:1px solid var(--border-subtle);padding-top:10px">
+        Gateway Status: Active &bull; Zero Frame Drops
       </div>
     </div>
   </div>
 
-  <!-- Evidence Modalities (Comprehensive 6-Card Modality Grid) -->
+  <!-- Evidence Modalities (6-Card Responsive Grid) -->
   <div class="evidence-section">
     <div class="section-title-bar">
-      <div class="section-heading"><span>📊</span> Biometric & Attestation Evidence Modalities</div>
-      <div style="font-size:11px;color:var(--text-dim)">Real-time telemetry extracted from hardware envelope</div>
+      <div class="section-heading"><span>📊</span> Biometric &amp; Attestation Evidence Modalities</div>
     </div>
     <div class="evidence-grid">
-      <!-- 1. Face & Spatial ROI Agreement -->
+      <!-- Card 1: Face Spatial ROI -->
       <div class="evidence-card">
         <div>
           <div class="ev-top">
@@ -664,7 +638,7 @@ DASHBOARD_HTML = """<!doctype html>
           </div>
           <div class="ev-metrics">
             <div class="ev-metric-item">
-              <span class="ev-metric-lbl">Spatial ROI Correlation</span>
+              <span class="ev-metric-lbl">ROI Correlation:</span>
               <span class="ev-metric-val" id="evRoiCorr">—</span>
             </div>
             <div class="meter-bar-bg">
@@ -675,7 +649,7 @@ DASHBOARD_HTML = """<!doctype html>
         <div class="ev-desc">Forehead and cheek regions hemoglobin perfusion agreement.</div>
       </div>
 
-      <!-- 2. rPPG Pulse Dynamics -->
+      <!-- Card 2: rPPG Hemodynamics -->
       <div class="evidence-card">
         <div>
           <div class="ev-top">
@@ -684,15 +658,15 @@ DASHBOARD_HTML = """<!doctype html>
           </div>
           <div class="ev-metrics">
             <div class="ev-metric-item">
-              <span class="ev-metric-lbl">Heart Rate</span>
+              <span class="ev-metric-lbl">Heart Rate:</span>
               <span class="ev-metric-val" id="evHrBpm">—</span>
             </div>
             <div class="ev-metric-item">
-              <span class="ev-metric-lbl">SNR (Bandpass Ratio)</span>
+              <span class="ev-metric-lbl">SNR (Bandpass):</span>
               <span class="ev-metric-val" id="evSnr">—</span>
             </div>
             <div class="ev-metric-item">
-              <span class="ev-metric-lbl">Signal Quality Index</span>
+              <span class="ev-metric-lbl">Signal Quality:</span>
               <span class="ev-metric-val" id="evSignalQuality">—</span>
             </div>
             <div class="meter-bar-bg">
@@ -703,20 +677,20 @@ DASHBOARD_HTML = """<!doctype html>
         <div class="ev-desc">Sub-surface micro-vascular dermal pulse stability.</div>
       </div>
 
-      <!-- 3. Behavioral Consistency -->
+      <!-- Card 3: Behavioral & Temporal -->
       <div class="evidence-card">
         <div>
           <div class="ev-top">
-            <div class="ev-name"><span>🧠</span> Behavioral & Temporal</div>
+            <div class="ev-name"><span>🧠</span> Behavioral &amp; Temporal</div>
             <span class="ev-badge dim" id="evBehaviorStatus">Standby</span>
           </div>
           <div class="ev-metrics">
             <div class="ev-metric-item">
-              <span class="ev-metric-lbl">Inference Model</span>
+              <span class="ev-metric-lbl">Model Classifier:</span>
               <span class="ev-metric-val" id="evModelVersion">—</span>
             </div>
             <div class="ev-metric-item">
-              <span class="ev-metric-lbl">Anti-Replay Nonce</span>
+              <span class="ev-metric-lbl">Nonce Freshness:</span>
               <span class="ev-metric-val" id="evNonceStatus">—</span>
             </div>
           </div>
@@ -724,7 +698,7 @@ DASHBOARD_HTML = """<!doctype html>
         <div class="ev-desc">Inter-frame temporal timing and anti-injection neural gates.</div>
       </div>
 
-      <!-- 4. Interactive Challenge -->
+      <!-- Card 4: Interactive Challenge -->
       <div class="evidence-card">
         <div>
           <div class="ev-top">
@@ -733,32 +707,32 @@ DASHBOARD_HTML = """<!doctype html>
           </div>
           <div class="ev-metrics">
             <div class="ev-metric-item">
-              <span class="ev-metric-lbl">Sequence</span>
-              <span class="ev-metric-val" id="evSequence" style="font-size:10px">—</span>
+              <span class="ev-metric-lbl">Challenge ID:</span>
+              <span class="ev-metric-val" id="evChallengeId">—</span>
             </div>
             <div class="ev-metric-item">
-              <span class="ev-metric-lbl">Challenge ID</span>
-              <span class="ev-metric-val mono" id="evChallengeId" style="font-size:10px">—</span>
+              <span class="ev-metric-lbl">Stimulus Token:</span>
+              <span class="ev-metric-val" id="evSequence">—</span>
             </div>
           </div>
         </div>
         <div class="ev-desc">Randomized directional/chromatic prompt responses.</div>
       </div>
 
-      <!-- 5. Camera & Environmental Quality -->
+      <!-- Card 5: Sensor & Optical -->
       <div class="evidence-card">
         <div>
           <div class="ev-top">
-            <div class="ev-name"><span>📷</span> Sensor & Optical</div>
+            <div class="ev-name"><span>📷</span> Sensor &amp; Optical</div>
             <span class="ev-badge dim" id="evCameraStatus">Standby</span>
           </div>
           <div class="ev-metrics">
             <div class="ev-metric-item">
-              <span class="ev-metric-lbl">Optical Dynamic Sync</span>
+              <span class="ev-metric-lbl">Reflectance Sync:</span>
               <span class="ev-metric-val" id="evOpticalQuality">—</span>
             </div>
             <div class="ev-metric-item">
-              <span class="ev-metric-lbl">Environmental Gate</span>
+              <span class="ev-metric-lbl">Quality Gate:</span>
               <span class="ev-metric-val" id="evSensorGate">—</span>
             </div>
           </div>
@@ -766,7 +740,7 @@ DASHBOARD_HTML = """<!doctype html>
         <div class="ev-desc">Camera frame cadence, exposure stability, and optical sync.</div>
       </div>
 
-      <!-- 6. Hardware Enclave & Attestation -->
+      <!-- Card 6: Hardware Enclave -->
       <div class="evidence-card">
         <div>
           <div class="ev-top">
@@ -775,12 +749,12 @@ DASHBOARD_HTML = """<!doctype html>
           </div>
           <div class="ev-metrics">
             <div class="ev-metric-item">
-              <span class="ev-metric-lbl">Key Algorithm</span>
-              <span class="ev-metric-val mono" id="evKeyAlias">secp256r1</span>
+              <span class="ev-metric-lbl">Cryptographic Key:</span>
+              <span class="ev-metric-val" id="evKeyAlias">secp256r1</span>
             </div>
             <div class="ev-metric-item">
-              <span class="ev-metric-lbl">Attestation Digest</span>
-              <span class="ev-metric-val mono" id="evShaDigest" style="font-size:10px">—</span>
+              <span class="ev-metric-lbl">SHA-256 Attest:</span>
+              <span class="ev-metric-val" id="evShaDigest">—</span>
             </div>
           </div>
         </div>
@@ -789,7 +763,7 @@ DASHBOARD_HTML = """<!doctype html>
     </div>
   </div>
 
-  <!-- Security & Integrity Attestation Banner -->
+  <!-- Security Attestation Bar -->
   <div class="security-bar">
     <div class="sec-item"><span class="sec-check">✓</span> <span>Hardware Enclave Attested</span></div>
     <div class="sec-item"><span class="sec-check">✓</span> <span>ECDSA P-256 Signature Valid</span></div>
@@ -797,46 +771,46 @@ DASHBOARD_HTML = """<!doctype html>
     <div class="sec-item"><span class="sec-check">✓</span> <span>Tamper-Evident Offline Receipt</span></div>
   </div>
 
-  <!-- Progressive Disclosure: Technical Telemetry & 28-Feature Schema Inspection -->
+  <!-- Accordion: Frozen 28-Feature Schema Inspector -->
   <div class="tech-toggle-bar">
     <button id="btnToggleTech" type="button" class="btn-accordion">
-      <span style="display:flex;align-items:center;gap:8px"><span>🔬</span> <span>Technical Telemetry &amp; 28-Feature Schema Inspection</span></span>
-      <span id="techToggleArrow">▼ Show Technical Inspection</span>
+      <span>📐 View Frozen 28-Feature Schema Vector (Architecture §6 &bull; edgeppg-1.0)</span>
+      <span id="techToggleArrow">▼</span>
     </button>
     <div id="techPanel" class="tech-panel" style="display:none">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid var(--border-sub);padding-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <div>
-          <strong style="color:var(--text-main);font-size:13px">Frozen 28-Feature Schema Specification (edgeppg-1.0)</strong>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:2px">Byte-exact feature vector assembled by on-device RowAssembler (§6)</div>
+          <strong style="color:var(--cyan)">Frozen Feature Order &amp; Dimension Specification</strong>
+          <div style="font-size:11px;color:var(--text-dim)">Pinned by tests/test_schema_parity.py &amp; Architecture §6 &bull; Nonce Freshness: 300s TTL</div>
         </div>
-        <div class="mono" style="font-size:11px;color:var(--brown-medium)">Single-Applicant Mode</div>
+        <div class="mono" style="font-size:11px;color:var(--cyan)">Single-Applicant Mode</div>
       </div>
-      <div style="overflow-x:auto;max-height:360px;overflow-y:auto">
+      <div style="overflow-x:auto">
         <table class="tech-table">
           <thead>
             <tr>
               <th>#</th>
               <th>Feature Name</th>
               <th>Category</th>
-              <th>Scale / Unit</th>
-              <th>Value</th>
-              <th>Status</th>
+              <th>Documented Unit</th>
+              <th>Evaluated Value</th>
+              <th>Schema Status</th>
             </tr>
           </thead>
           <tbody id="schemaTableBody"></tbody>
         </table>
       </div>
-      <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border-sub);display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-dim)">
-        <span>Canonical Envelope Order: <code>challenge_id, confidence, decision, expected_seq, hr_bpm, model_version, nonce, roi_corr, signal_quality, snr, timestamp_ms</code></span>
-        <span class="mono" id="techDigest">Digest: —</span>
+      <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border-subtle);display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim)">
+        <span id="techDigest">Digest: —</span>
+        <span>Schema Version: <strong style="color:var(--cyan)">edgeppg-1.0 (28 Float32)</strong></span>
       </div>
     </div>
   </div>
 
-  <!-- Controlled Evaluation & Presentation Attack Test Lab (Section 13) -->
+  <!-- Test Lab Evaluation Section -->
   <div class="test-lab-section">
     <div class="ops-card" style="margin-top:22px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid var(--border-sub);padding-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
         <div>
           <h2><span>🧪</span> EdgePPG Test Lab — Presentation Attack &amp; Spoof Evaluation Harness</h2>
           <p class="hint" style="margin-bottom:0">Development and audit evaluation harness. Executes the <strong>REAL EdgePPG pipeline</strong> (Schema Validation &rarr; XGBoost/RF Inference &rarr; Security Decision Gates &rarr; Cryptographic Receipt) without shortcuts or result hardcoding.</p>
@@ -847,8 +821,8 @@ DASHBOARD_HTML = """<!doctype html>
       <div style="display:grid;grid-template-columns:1fr 1.6fr;gap:20px">
         <!-- Scenario Controls -->
         <div>
-          <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Select Test Scenario<br>
-            <select id="labScenarioSelect" style="width:100%;margin-top:6px;background:#FDF9F6;color:var(--text-main);border:1px solid var(--border-card);border-radius:10px;padding:10px 14px;font-size:13px;font-family:inherit">
+          <label style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em">Select Test Scenario<br>
+            <select id="labScenarioSelect" style="width:100%;margin-top:6px;background:var(--navy-card);color:var(--text-high);border:1px solid var(--border-strong);border-radius:8px;padding:10px 14px;font-size:13px;font-family:inherit">
               <option value="genuine">1. Genuine Applicant (Live Human Baseline)</option>
               <option value="printed_photo">2. Printed Photo (Physical Planar Attack)</option>
               <option value="screen_image">3. Screen Image (Digital 2D Display Attack)</option>
@@ -859,11 +833,11 @@ DASHBOARD_HTML = """<!doctype html>
             </select>
           </label>
 
-          <div id="labScenarioCard" style="background:#FDF9F6;border:1px solid var(--border-card);border-radius:12px;padding:14px;margin-top:14px;font-size:12px">
-            <div style="font-weight:700;color:var(--text-main)" id="labScenTitle">1. Genuine Applicant</div>
-            <div style="color:var(--brown-medium);font-size:11px;margin:4px 0" id="labScenCategory">Benchmark Baseline · Live Human</div>
+          <div id="labScenarioCard" style="background:var(--navy-card);border:1px solid var(--border-subtle);border-radius:10px;padding:14px;margin-top:14px;font-size:12px">
+            <div style="font-weight:700;color:var(--cyan)" id="labScenTitle">1. Genuine Applicant</div>
+            <div style="color:var(--text-med);font-size:11px;margin:4px 0" id="labScenCategory">Benchmark Baseline · Live Human</div>
             <div style="color:var(--text-dim);line-height:1.4;margin-bottom:8px" id="labScenDesc">Cooperative live human in standard lighting with natural arterial blood perfusion.</div>
-            <div style="padding-top:8px;border-top:1px solid var(--border-sub);font-size:11px;color:var(--text-muted)">
+            <div style="padding-top:8px;border-top:1px solid var(--border-subtle);font-size:11px;color:var(--text-med)">
               <strong>Input Media:</strong> <span id="labScenMedia">Live Camera 30 FPS Stream</span>
             </div>
           </div>
@@ -875,46 +849,46 @@ DASHBOARD_HTML = """<!doctype html>
         </div>
 
         <!-- Real Execution Breakdown -->
-        <div id="labResultPanel" style="background:#FDF9F6;border:1px solid var(--border-card);border-radius:14px;padding:18px">
+        <div id="labResultPanel" style="background:var(--navy-card);border:1px solid var(--border-subtle);border-radius:12px;padding:18px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
             <span style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase">Observed Pipeline Execution</span>
             <span id="labVerdictBadge" class="res-pill standby">Ready</span>
           </div>
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-            <div style="background:#FFFFFF;border:1px solid var(--border-card);border-radius:10px;padding:10px">
+            <div style="background:var(--navy-surface);border:1px solid var(--border-subtle);border-radius:8px;padding:10px">
               <span class="tel-lbl">ML Model P(LIVE)</span>
-              <div style="font-size:18px;font-weight:800;color:var(--brown-medium);font-family:'JetBrains Mono',monospace" id="labPLive">—%</div>
+              <div style="font-size:18px;font-weight:800;color:var(--cyan);font-family:'JetBrains Mono',monospace" id="labPLive">—%</div>
               <div style="font-size:10px;color:var(--text-dim)" id="labModelType">Frozen Classifier</div>
             </div>
-            <div style="background:#FFFFFF;border:1px solid var(--border-card);border-radius:10px;padding:10px">
+            <div style="background:var(--navy-surface);border:1px solid var(--border-subtle);border-radius:8px;padding:10px">
               <span class="tel-lbl">Triggered Security Gate</span>
-              <div style="font-size:13px;font-weight:700;color:var(--text-main)" id="labActiveGate">—</div>
+              <div style="font-size:13px;font-weight:700;color:var(--cyan)" id="labActiveGate">—</div>
               <div style="font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace" id="labGateReason">—</div>
             </div>
           </div>
 
-          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px">Observed Multimodal Evidence</div>
+          <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Observed Multimodal Evidence</div>
           <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;font-size:11px">
-            <div style="background:#FFFFFF;border:1px solid var(--border-sub);padding:8px;border-radius:8px">Face: <strong id="labEvFace" style="color:var(--text-main)">—</strong></div>
-            <div style="background:#FFFFFF;border:1px solid var(--border-sub);padding:8px;border-radius:8px">rPPG: <strong id="labEvRppg" style="color:var(--text-main)">—</strong></div>
-            <div style="background:#FFFFFF;border:1px solid var(--border-sub);padding:8px;border-radius:8px">Behavior: <strong id="labEvBehavior" style="color:var(--text-main)">—</strong></div>
-            <div style="background:#FFFFFF;border:1px solid var(--border-sub);padding:8px;border-radius:8px">Challenge: <strong id="labEvChallenge" style="color:var(--text-main)">—</strong></div>
-            <div style="background:#FFFFFF;border:1px solid var(--border-sub);padding:8px;border-radius:8px">Camera: <strong id="labEvCamera" style="color:var(--text-main)">—</strong></div>
-            <div style="background:#FFFFFF;border:1px solid var(--border-sub);padding:8px;border-radius:8px">Integrity: <strong id="labEvIntegrity" style="color:var(--text-main)">—</strong></div>
+            <div style="background:var(--navy-surface);border:1px solid var(--border-subtle);padding:8px;border-radius:6px">Face: <strong id="labEvFace" style="color:var(--cyan)">—</strong></div>
+            <div style="background:var(--navy-surface);border:1px solid var(--border-subtle);padding:8px;border-radius:6px">rPPG: <strong id="labEvRppg" style="color:var(--cyan)">—</strong></div>
+            <div style="background:var(--navy-surface);border:1px solid var(--border-subtle);padding:8px;border-radius:6px">Behavior: <strong id="labEvBehavior" style="color:var(--cyan)">—</strong></div>
+            <div style="background:var(--navy-surface);border:1px solid var(--border-subtle);padding:8px;border-radius:6px">Challenge: <strong id="labEvChallenge" style="color:var(--cyan)">—</strong></div>
+            <div style="background:var(--navy-surface);border:1px solid var(--border-subtle);padding:8px;border-radius:6px">Camera: <strong id="labEvCamera" style="color:var(--cyan)">—</strong></div>
+            <div style="background:var(--navy-surface);border:1px solid var(--border-subtle);padding:8px;border-radius:6px">Integrity: <strong id="labEvIntegrity" style="color:var(--cyan)">—</strong></div>
           </div>
 
-          <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border-sub);font-size:11px;color:var(--text-dim);display:flex;justify-content:space-between">
+          <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border-subtle);font-size:11px;color:var(--text-dim);display:flex;justify-content:space-between">
             <span id="labReceiptPath">Receipt: —</span>
             <span id="labShaDigest">Digest: —</span>
           </div>
         </div>
       </div>
 
-      <!-- Scenario Comparison Ledger (Section 14) -->
-      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-sub)">
+      <!-- Scenario Comparison Ledger -->
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-subtle)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <strong style="color:var(--text-main);font-size:13px">Scenario Evaluation Comparison Ledger (Section 14)</strong>
+          <strong style="color:var(--cyan);font-size:13px">Scenario Evaluation Comparison Ledger (Section 14)</strong>
           <span style="font-size:11px;color:var(--text-dim)">Empirical Evidence Matrix Generated from Real Pipeline</span>
         </div>
         <div style="overflow-x:auto">
@@ -939,18 +913,16 @@ DASHBOARD_HTML = """<!doctype html>
     </div>
   </div>
 
-  <!-- Operations: Scheduling, Queue, Intake & Logs -->
+  <!-- Operational Panels: Queue, Provisioning & Intake -->
   <div class="ops-grid">
-    <!-- Left Column: Session Scheduling & Queue -->
     <div>
       <div class="ops-card" style="margin-bottom:20px">
         <h2><span>📅</span> Provision VKYC Session</h2>
-        <p class="hint">Create a scheduled verification session. The mobile app can join directly via Session / Call ID.</p>
+        <p class="hint">Schedule a zero-knowledge identity verification session. Enclave keypairs are bound per session.</p>
         <div class="form">
-          <label>Session / Call ID (optional)<br><input id="fCallId" type="text" placeholder="e.g. 001 (or auto)"></label>
-          <label>Applicant Name<br><input id="fName" type="text" placeholder="e.g. User 1"></label>
-          <label>Applicant Reference ID<br><input id="fRef" type="text" placeholder="e.g. User1"></label>
-          <label>Scheduled Session Time<br><input id="fWhen" type="datetime-local"></label>
+          <label>Applicant Reference<input id="inpRef" value="APP-8421" placeholder="e.g. APP-8421"></label>
+          <label>Applicant Name<input id="inpName" value="Alex Morgan" placeholder="Legal full name"></label>
+          <label>Scheduled Window<input id="inpTime" value="10:00 AM Today" placeholder="e.g. 10:00 AM Today"></label>
           <div class="btn-row">
             <button id="btnSchedule">+ Schedule Session</button>
             <button id="btnSample" type="button" class="btn-ghost">⚡ Autofill Sample</button>
@@ -960,7 +932,7 @@ DASHBOARD_HTML = """<!doctype html>
 
       <div class="ops-card">
         <h2><span>👥</span> Live Verification Queue</h2>
-        <div id="waitBanner" class="waitbanner" style="display:none"></div>
+        <p class="hint">Current calls scheduled or awaiting edge phone connection.</p>
         <div style="overflow-x:auto">
           <table id="calls">
             <thead>
@@ -972,15 +944,14 @@ DASHBOARD_HTML = """<!doctype html>
       </div>
     </div>
 
-    <!-- Right Column: Decision Audit Log & Direct Fallback Intake -->
     <div>
       <div class="ops-card" style="margin-bottom:20px">
-        <h2><span>🛡️</span> Decision & Audit Log</h2>
-        <p class="hint">Real-time tamper-evident verification ledger stored on the local verifier node.</p>
+        <h2><span>🛡️</span> Decision &amp; Audit Log</h2>
+        <p class="hint">Attested sessions cryptographically verified against the hardware root of trust.</p>
         <div style="overflow-x:auto">
           <table id="log">
             <thead>
-              <tr><th>Time</th><th>Decision</th><th>Session</th><th>SNR</th><th>Status</th><th>Receipt</th></tr>
+              <tr><th>Timestamp</th><th>Call</th><th>Verdict</th><th>Receipt</th></tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -989,9 +960,10 @@ DASHBOARD_HTML = """<!doctype html>
 
       <div class="ops-card">
         <h2><span>📦</span> Intake (QR / Manual Fallback)</h2>
-        <p class="hint">Submit signed envelope JSON directly. (Phone Wi-Fi transport routes directly to <code>/api/result</code>).</p>
-        <textarea id="env" rows="5" placeholder='{"data":"...","sig":"...","alg":"SHA256withECDSA"}'></textarea>
+        <p class="hint">If direct network transport is blocked, paste the raw base64 envelope or scan QR code here.</p>
+        <textarea id="pasted" rows="4" placeholder="Paste envelope JSON or Base64 QR payload..."></textarea>
         <p style="margin-top:14px"><button id="btn">Verify Pasted Envelope</button></p>
+        <div id="pasteRes" style="margin-top:14px;font-size:12px;display:none"></div>
       </div>
     </div>
   </div>
@@ -1061,7 +1033,7 @@ DASHBOARD_HTML = """<!doctype html>
 
       tr.innerHTML = "<td style='color:var(--text-dim)'>" + spec.num + "</td>"
         + "<td><strong style='color:var(--text-main)'>" + esc(spec.name) + "</strong></td>"
-        + "<td style='color:var(--brown-medium)'>" + esc(spec.cat) + "</td>"
+        + "<td style='color:var(--text-med)'>" + esc(spec.cat) + "</td>"
         + "<td style='color:var(--text-dim);font-size:10px'>" + esc(spec.unit) + "</td>"
         + "<td>" + valStr + "</td>"
         + "<td>" + statusHtml + "</td>";
@@ -1077,7 +1049,7 @@ DASHBOARD_HTML = """<!doctype html>
 
     if (conf == null || isNaN(conf)) {
       ring.style.strokeDashoffset = CIRCUMFERENCE;
-      ring.style.stroke = "#D4C5B9";
+      ring.style.stroke = "#CFE5FA";
       percentEl.textContent = "—%";
       pliveEl.textContent = "P(LIVE) Unavailable";
       rCard.className = "result-card";
@@ -1088,7 +1060,7 @@ DASHBOARD_HTML = """<!doctype html>
     const offset = CIRCUMFERENCE * (1 - p);
     ring.style.strokeDashoffset = offset;
 
-    const strokeColor = dec === "LIVE" ? "#2E7D5B" : (dec === "SPOOF" ? "#C2410C" : "#B45309");
+    const strokeColor = dec === "LIVE" ? "#10B981" : (dec === "SPOOF" ? "#EF4444" : "#F59E0B");
     ring.style.stroke = strokeColor;
     percentEl.textContent = Math.round(p * 100) + "%";
     pliveEl.textContent = "P(LIVE) " + p.toFixed(2);
@@ -1153,11 +1125,11 @@ DASHBOARD_HTML = """<!doctype html>
   function append(m) {
     const tr = document.createElement("tr");
     const t = m.telemetry || {};
-    const statusText = m.ok ? "<span style='color:#2E7D5B;font-weight:700'>VALID</span>" : "<span style='color:#C2410C;font-weight:700'>INVALID</span>";
+    const statusText = m.ok ? "<span class='badge-subtle'>[✓] VALID</span>" : "<span class='badge-subtle' style='border-style:dashed'>[✕] INVALID</span>";
     const dec = t.decision || (m.ok ? "LIVE" : "INVALID");
-    const decColor = dec === "LIVE" ? "#2E7D5B" : (dec === "SPOOF" ? "#C2410C" : "#B45309");
+    const decPill = "<span class='res-pill " + (dec === "LIVE" ? "live" : (dec === "SPOOF" ? "spoof" : "uncertain")) + "'>" + esc(dec) + "</span>";
     tr.innerHTML = "<td class='mono' style='color:var(--text-dim)'>" + new Date().toLocaleTimeString() + "</td><td>"
-      + "<strong style='color:" + decColor + "'>" + dec + "</strong></td><td class='mono' style='color:var(--brown-medium)'>" + (t.challenge_id ? t.challenge_id.slice(0, 12) + "…" : "manual")
+      + decPill + "</td><td class='mono' style='color:var(--text-med)'>" + (t.challenge_id ? t.challenge_id.slice(0, 12) + "…" : "manual")
       + "</td><td class='mono'>" + (t.snr != null ? (typeof t.snr === 'number' ? t.snr.toFixed(3) : t.snr) : "—") + "</td><td>"
       + statusText + "</td><td class='mono' style='color:var(--text-muted);font-size:11px'>" + (m.receipt ? m.receipt.split(/[\\\\/]/).pop() : (m.reason || "Enclave verified")) + "</td>";
     log.prepend(tr);
@@ -1244,27 +1216,27 @@ DASHBOARD_HTML = """<!doctype html>
         if (container) container.insertBefore(liveBanner, container.firstChild);
       }
       const isSpoof = Boolean(ls.spoof_detected || ls.is_spoof);
-      liveBanner.style.background = isSpoof ? "#FEF2F2" : "#F0FDF4";
-      liveBanner.style.border = isSpoof ? "2px solid #EF4444" : "2px solid #10B981";
-      liveBanner.style.color = isSpoof ? "#DC2626" : "#059669";
-      const statusIcon = isSpoof ? "🚨 SPOOF ALERT" : "📡 REALTIME APPLICANT STREAM";
+      liveBanner.style.background = isSpoof ? "var(--navy-card)" : "var(--navy-surface)";
+      liveBanner.style.border = isSpoof ? "2px dashed var(--cyan)" : "1px solid var(--cyan-border)";
+      liveBanner.style.color = "var(--cyan)";
+      const statusIcon = isSpoof ? "⚠️ [✕] SPOOF ALERT" : "📡 [✓] REALTIME APPLICANT STREAM";
       const hrVal = ls.hr_bpm || ls.hr || 0;
       const perfVal = ls.perfusion != null ? Number(ls.perfusion).toFixed(2) : "--";
       const snrVal = ls.snr_db != null ? ls.snr_db : "--";
       const stageTxt = ls.stage_desc || ls.state || "VERIFYING";
       const lockTxt = ls.hardware_lock ? "🔒 Hardware Lock ✓" : "🔓 Locking…";
-      const faceTxt = ls.face_detected ? "👤 Face Detected" : "👤 No Face";
+      const faceTxt = ls.face_detected ? "👤 Face Detected ✓" : "👤 Searching…";
 
       liveBanner.innerHTML = "<div><span style='font-size:13px;letter-spacing:0.04em'>" + statusIcon + "</span> "
         + "<strong style='color:var(--text-main);margin-left:8px;font-size:14px'>" + esc(ls.applicant_ref || "Applicant") + "</strong> "
-        + "<span class='mono' style='font-size:12px;color:var(--brown-medium);margin-left:6px'>(" + esc(ls.call_id || "Direct") + ")</span> "
-        + "<span style='font-size:11px;margin-left:10px;padding:3px 8px;border-radius:6px;background:rgba(0,0,0,0.05);color:var(--text-dim)'>" + esc(stageTxt) + "</span></div>"
+        + "<span class='mono' style='font-size:12px;color:var(--cyan-dim);margin-left:6px'>(" + esc(ls.call_id || "Direct") + ")</span> "
+        + "<span style='font-size:11px;margin-left:10px;padding:3px 8px;border-radius:6px;background:var(--cyan-fill-subtle);color:var(--cyan);border:1px solid var(--cyan-border)'>" + esc(stageTxt) + "</span></div>"
         + "<div class='mono' style='font-size:12px;display:flex;gap:12px;align-items:center'>"
         + "<span>" + (hrVal > 0 ? "💓 " + hrVal + " BPM" : "💓 -- BPM") + "</span>"
         + "<span>PERF: " + perfVal + "</span>"
         + "<span>SNR: " + snrVal + " dB</span>"
-        + "<span style='font-size:11px;color:" + (ls.face_detected ? "#059669" : "#DC2626") + "'>" + faceTxt + "</span>"
-        + "<span style='font-size:11px;color:#4F46E5'>" + lockTxt + "</span></div>";
+        + "<span style='font-size:11px;color:var(--cyan)'>" + faceTxt + "</span>"
+        + "<span style='font-size:11px;color:var(--cyan-high)'>" + lockTxt + "</span></div>";
       liveBanner.style.display = "flex";
 
       // Also dynamically update active focal session indicators in real time
@@ -1272,9 +1244,9 @@ DASHBOARD_HTML = """<!doctype html>
         document.getElementById("resCallId").textContent = ls.call_id;
         document.getElementById("activeRef").textContent = ls.applicant_ref || "—";
         document.getElementById("opCall").textContent = "STREAMING (LIVE)";
-        document.getElementById("opCall").style.color = "#34D399";
+        document.getElementById("opCall").style.color = "var(--cyan)";
         document.getElementById("opVerif").textContent = isSpoof ? "SPOOF DETECTED" : "IN_PROGRESS";
-        document.getElementById("opVerif").style.color = isSpoof ? "#EF4444" : "#FBBF24";
+        document.getElementById("opVerif").style.color = "var(--cyan-high)";
       }
     } else {
       const liveBanner = document.getElementById("realtimeLiveBanner");
@@ -1300,14 +1272,14 @@ DASHBOARD_HTML = """<!doctype html>
           knownResults[c.call_id] = true;
           const trLog = document.createElement("tr");
           const dec = c.result.decision || "—";
-          const decColor = dec === "LIVE" ? "#2E7D5B" : (dec === "SPOOF" ? "#C2410C" : "#B45309");
+          const decPill = "<span class='res-pill " + (dec === "LIVE" ? "live" : (dec === "SPOOF" ? "spoof" : "uncertain")) + "'>" + esc(dec) + "</span>";
           const timeStr = c.completed_at_ms ? new Date(c.completed_at_ms).toLocaleTimeString() : new Date().toLocaleTimeString();
           const recName = c.result.receipt ? c.result.receipt.split(/[\\\\/]/).pop() : "receipt.json";
           const t = c.result.telemetry || {};
           trLog.innerHTML = "<td class='mono' style='color:var(--text-dim)'>" + timeStr + "</td><td>"
-            + "<strong style='color:" + decColor + "'>" + esc(dec) + "</strong></td><td class='mono' style='color:var(--brown-medium)'>" + esc(c.call_id)
+            + decPill + "</td><td class='mono' style='color:var(--text-med)'>" + esc(c.call_id)
             + "</td><td class='mono'>" + (t.snr != null ? t.snr : "—") + "</td><td>"
-            + "<span style='color:#2E7D5B;font-weight:700'>VALID</span></td><td class='mono' style='color:var(--text-muted);font-size:11px'>" + esc(recName) + "</td>";
+            + "<span class='badge-subtle'>[✓] VALID</span></td><td class='mono' style='color:var(--text-muted);font-size:11px'>" + esc(recName) + "</td>";
           document.querySelector("#log tbody").prepend(trLog);
         }
       }
@@ -1317,13 +1289,12 @@ DASHBOARD_HTML = """<!doctype html>
       const who = "<div style='display:flex;align-items:center'><span class='avatar-chip'>" + esc(initial) + "</span><div><strong>" 
         + esc(c.applicant_name) + "</strong><br><span style='color:var(--text-dim);font-size:11px'>" + esc(c.applicant_ref) + "</span></div></div>";
       const dec = (c.result && c.result.decision) ? c.result.decision : "";
-      const decColor = dec === "LIVE" ? "#2E7D5B" : (dec === "SPOOF" ? "#C2410C" : "#B45309");
-      const res = dec ? " · <strong style='color:" + decColor + "'>" + esc(dec) + "</strong>" : "";
+      const res = dec ? " · <span class='res-pill " + (dec === "LIVE" ? "live" : (dec === "SPOOF" ? "spoof" : "uncertain")) + "'>" + esc(dec) + "</span>" : "";
       let act = "";
       if (c.status === "SCHEDULED") act = "<button class='btn-sm' data-wait='" + esc(c.call_id) + "'>Start Waiting</button>";
-      else if (c.status === "COMPLETED") act = "<span class='mono' style='color:#2E7D5B;font-size:11px;font-weight:700'>Receipt Validated ✓</span>";
-      else if (c.status === "WAITING") act = "<span style='color:#B45309;font-size:11px;font-weight:700'>Operator Ready</span>";
-      tr.innerHTML = "<td class='mono' style='font-size:12px;font-weight:700;color:var(--brown-medium)'>" + esc(c.call_id) + "</td><td>" + who + "</td><td class='mono' style='font-size:11px;color:var(--text-muted)'>"
+      else if (c.status === "COMPLETED") act = "<span class='mono' style='color:var(--cyan);font-size:11px;font-weight:700'>Receipt Validated [✓]</span>";
+      else if (c.status === "WAITING") act = "<span style='color:var(--cyan-dim);font-size:11px;font-weight:700'>Operator Ready</span>";
+      tr.innerHTML = "<td class='mono' style='font-size:12px;font-weight:700;color:var(--text-med)'>" + esc(c.call_id) + "</td><td>" + who + "</td><td class='mono' style='font-size:11px;color:var(--text-muted)'>"
         + esc(c.scheduled_time || "—") + "</td><td><span class='st st-" + esc(c.status) + "'>"
         + esc(c.status) + "</span>" + res + "</td><td>" + act + "</td>";
       tb.appendChild(tr);
@@ -1343,7 +1314,7 @@ DASHBOARD_HTML = """<!doctype html>
       document.getElementById("activeSchedTime").textContent = focal.scheduled_time || "Direct Session";
       document.getElementById("activeAvatar").textContent = (focal.applicant_name || "A").trim().charAt(0).toUpperCase();
       document.getElementById("opCall").textContent = focal.status;
-      document.getElementById("opCall").style.color = focal.status === "COMPLETED" ? "#A5B4FC" : (focal.status === "CONNECTED" ? "#34D399" : "#FBBF24");
+      document.getElementById("opCall").style.color = "var(--cyan)";
     }
 
     // Visibly update Latest Verification Result Card, Confidence Hero, & Header Status
@@ -1483,7 +1454,7 @@ DASHBOARD_HTML = """<!doctype html>
     badge.className = "res-pill " + (dec === "LIVE" ? "live" : (dec === "SPOOF" ? "spoof" : "uncertain"));
 
     document.getElementById("labPLive").textContent = ev.model_output.p_live_percent;
-    document.getElementById("labPLive").style.color = dec === "LIVE" ? "#2E7D5B" : (dec === "SPOOF" ? "#C2410C" : "#B45309");
+    document.getElementById("labPLive").style.color = "var(--cyan)";
     document.getElementById("labModelType").textContent = ev.model_output.model_name + " (Thresholds: " + ev.model_output.thresholds.live + "/" + ev.model_output.thresholds.spoof + ")";
 
     document.getElementById("labActiveGate").textContent = ev.security_gates.gate_evaluated;
@@ -1506,16 +1477,16 @@ DASHBOARD_HTML = """<!doctype html>
     const tb = document.querySelector("#labComparisonTable tbody");
     if (!tb) return;
     const dec = ev.final_decision;
-    const decColor = dec === "LIVE" ? "#2E7D5B" : (dec === "SPOOF" ? "#C2410C" : "#B45309");
+    const decPill = "<span class='res-pill " + (dec === "LIVE" ? "live" : (dec === "SPOOF" ? "spoof" : "uncertain")) + "'>" + esc(dec) + "</span>";
     const tr = document.createElement("tr");
     tr.innerHTML = "<td><strong style='color:var(--text-main)'>" + esc(ev.title) + "</strong></td>"
       + "<td style='color:var(--text-dim)'>" + esc(ev.attack_type) + "</td>"
       + "<td>" + esc(ev.evidence.rppg) + " <span style='font-size:10px;color:var(--text-dim)'>(" + esc(ev.evidence.snr) + ")</span></td>"
       + "<td>" + esc(ev.evidence.behavior) + "</td>"
       + "<td>" + esc(ev.evidence.timing_error) + "</td>"
-      + "<td style='font-weight:700;color:var(--brown-medium)'>" + esc(ev.model_output.p_live_percent) + "</td>"
+      + "<td style='font-weight:700;color:var(--cyan)'>" + esc(ev.model_output.p_live_percent) + "</td>"
       + "<td style='font-size:10px;color:var(--text-muted)'>" + esc(ev.security_gates.gate_evaluated) + "</td>"
-      + "<td><strong style='color:" + decColor + "'>" + esc(dec) + "</strong></td>"
+      + "<td>" + decPill + "</td>"
       + "<td class='mono' style='font-size:10px;color:var(--text-muted)'>" + esc(ev.crypto_verdict.receipt ? ev.crypto_verdict.receipt.split(/[\\\\/]/).pop() : "—") + "</td>";
     tb.prepend(tr);
   }
