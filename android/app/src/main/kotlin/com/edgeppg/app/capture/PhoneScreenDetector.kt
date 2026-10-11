@@ -39,11 +39,11 @@ import kotlin.math.min
  * routing in [SessionController] and [DecisionEngine].
  */
 class PhoneScreenDetector(
-    private val labelConfidenceThreshold: Float = 0.75f,
-    private val minConsecutiveDetections: Int = 7,
+    private val labelConfidenceThreshold: Float = 0.45f,
+    private val minConsecutiveDetections: Int = 2,
     private val labeler: ImageLabeler = ImageLabeling.getClient(
         ImageLabelerOptions.Builder()
-            .setConfidenceThreshold(0.45f)
+            .setConfidenceThreshold(0.40f)
             .build()
     ),
 ) {
@@ -61,7 +61,8 @@ class PhoneScreenDetector(
         // Specific keywords indicating actual secondary mobile phone screens
         private val PHONE_KEYWORDS = setOf(
             "mobile phone", "cell phone", "cellphone", "smartphone",
-            "tablet computer", "cellular phone"
+            "tablet computer", "cellular phone", "telephone", "electronic device",
+            "screen", "computer monitor", "display", "tablet", "gadget"
         )
 
         // Keywords indicating documents, paper, or identity cards that should suppress false spoof alarms
@@ -142,14 +143,13 @@ class PhoneScreenDetector(
 
         // --- Layer 1 & 2: Multi-Cue Screen Replay Verification ---
         // A true screen presentation attack exhibits BOTH extreme depth planarity collapse
-        // AND rectangular screen bezel boundaries enclosing the face. An isolated planar
-        // reading or background room line must NEVER falsely trigger a spoof verdict.
-        val planarityScore = if (!isHandPresent) evaluateMeshPlanarity(meshPoints) else 0f
-        val bezelScore = if (!isHandPresent && faceBox != null && !faceBox.isEmpty && planarityScore >= 0.50f) {
+        // AND rectangular screen bezel boundaries enclosing the face.
+        val planarityScore = evaluateMeshPlanarity(meshPoints)
+        val bezelScore = if (faceBox != null && !faceBox.isEmpty && planarityScore >= 0.40f) {
             evaluateScreenBezelEdges(image, faceBox, rotationDegrees)
         } else 0f
 
-        if (planarityScore >= 0.85f && bezelScore >= 0.65f) {
+        if (planarityScore >= 0.80f && bezelScore >= 0.50f) {
             detectedByThisFrame = true
             primaryReason = "screen-replay-detected:planarity=${"%.2f".format(planarityScore)}|bezel=${"%.2f".format(bezelScore)}"
             maxConfidence = max(planarityScore, bezelScore)
@@ -178,7 +178,7 @@ class PhoneScreenDetector(
                                 hasDocumentLabel = true
                             }
                         }
-                        if (!hasDocumentLabel && !isHandPresent) {
+                        if (!hasDocumentLabel) {
                             var matchedKeyword = false
                             var matchedConf = 0f
                             var matchedText = ""
@@ -198,7 +198,7 @@ class PhoneScreenDetector(
                                 if (consecutiveLabelHits >= 2) {
                                     isPhoneDetected = true
                                     lastReason = "device-label:$matchedText(${"%.2f".format(matchedConf)})"
-                                    phoneLatchUntilMs = System.currentTimeMillis() + 2500L
+                                    phoneLatchUntilMs = System.currentTimeMillis() + 4500L
                                 }
                             } else {
                                 consecutiveLabelHits = 0
@@ -226,14 +226,14 @@ class PhoneScreenDetector(
             isPhoneDetected = true
         } else if (detectedByThisFrame) {
             consecutiveCleanFrames = 0
-            consecutiveDetections = (consecutiveDetections + 1).coerceAtMost(6)
+            consecutiveDetections = (consecutiveDetections + 1).coerceAtMost(10)
             if (consecutiveDetections >= minConsecutiveDetections) {
                 isPhoneDetected = true
                 lastReason = primaryReason
             }
         } else {
             consecutiveCleanFrames++
-            if (consecutiveCleanFrames >= 6) {
+            if (consecutiveCleanFrames >= 12) {
                 consecutiveDetections = 0
                 isPhoneDetected = false
                 lastReason = ""

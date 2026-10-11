@@ -58,6 +58,7 @@ class SessionController(
         val seed: String,
         val lastDecision: DecisionEngine.Decision?,
         val lastResult: TransportResult?,
+        val lastVerdictReason: String = "",
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -319,7 +320,7 @@ class SessionController(
         val hasGenuinePhysioPulse = ((pCorr >= 0.05f && pSnr >= 0.08f) || (pSnr >= 0.15f)) && (pHr in 45f..185f)
         val activeChallengesMatched = liveChallengeCompleted || (liveGazeAccuracy >= 0.33f || liveHeadAccuracy >= 0.33f || liveHandAccuracy >= 0.33f)
 
-        val isConfirmedPhoneReplay = livePhoneDetected && !hasGenuinePhysioPulse
+        val isConfirmedPhoneReplay = livePhoneDetected
 
         val evaluatedLiveP = if (isConfirmedPhoneReplay) {
             com.edgeppg.app.Log.stage("session",
@@ -392,7 +393,7 @@ class SessionController(
             snr = liveSnr,
             roiCorr = liveRoiCorr,
         )
-        val updated = s.copy(lastDecision = verdict.decision)
+        val updated = s.copy(lastDecision = verdict.decision, lastVerdictReason = verdict.reason)
         _state.value = updated
         if (envelope == null) {
             val r = TransportResult.localError("integrity-sign-failed")

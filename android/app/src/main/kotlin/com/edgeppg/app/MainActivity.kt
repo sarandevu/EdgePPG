@@ -1083,6 +1083,7 @@ class MainActivity : ComponentActivity(), FrameListener {
                 val r = snap.lastResult
                 val decName = d?.name ?: "?"
                 val receipt = r?.receiptPath?.takeIf { it.isNotEmpty() } ?: "Saved on PC"
+                val gateReason = snap.lastVerdictReason.ifEmpty { r?.reason ?: "" }
                 when (decName) {
                     "LIVE" -> {
                         resultCard.background = makeShape(SURFACE_LIGHT_BLUE, 0xFF34D399.toInt(), 2, 12)
@@ -1096,14 +1097,19 @@ class MainActivity : ComponentActivity(), FrameListener {
                         resultCard.background = makeShape(SURFACE_LIGHT_BLUE, 0xFFEF4444.toInt(), 2, 12)
                         resultVerdictView.text = "⚠️ [✕] SYNTHETIC SPOOF DETECTED"
                         resultVerdictView.setTextColor(0xFFB91C1C.toInt())
-                        resultDetailsView.text = "Verdict: SPOOF (Rejected)\nReceipt: $receipt\nReason: ${r?.reason ?: "Liveness threshold failed"}"
+                        val reasonText = if (gateReason.contains("phone") || gateReason.contains("screen")) {
+                            "Presentation Attack (Phone / Screen replay detected)"
+                        } else {
+                            gateReason.ifEmpty { "Liveness threshold failed" }
+                        }
+                        resultDetailsView.text = "Verdict: SPOOF (Rejected)\nReceipt: $receipt\nReason: $reasonText"
                         resultDetailsView.setTextColor(TEXT_MUTED)
                     }
                     else -> {
                         resultCard.background = makeShape(SURFACE_LIGHT_BLUE, 0xFFF59E0B.toInt(), 2, 12)
-                        resultVerdictView.text = "⚠️ [?] INCONCLUSIVE SESSION"
+                        resultVerdictView.text = "⚠️ [?] UNCERTAIN / INCONCLUSIVE"
                         resultVerdictView.setTextColor(0xFFB45309.toInt())
-                        resultDetailsView.text = "Verdict: $decName\nReceipt: $receipt\nReason: ${r?.reason ?: "Lighting or movement unstable"}"
+                        resultDetailsView.text = "Verdict: UNCERTAIN (Rejected/Retry Required)\nReceipt: $receipt\nReason: ${gateReason.ifEmpty { "Lighting or movement unstable" }}"
                         resultDetailsView.setTextColor(TEXT_MUTED)
                     }
                 }
@@ -1409,12 +1415,12 @@ class MainActivity : ComponentActivity(), FrameListener {
         controller.livePhoneReason = reason
         lifecycleScope.launch(Dispatchers.Main.immediate) {
             if (isDetected) {
-                faceStatusView.text = "SCREEN/PHONE DETECTED"
-                faceStatusView.setTextColor(TEXT_PRIMARY)
+                faceStatusView.text = "⚠️ SPOOF: PHONE / SCREEN DETECTED"
+                faceStatusView.setTextColor(0xFFEF4444.toInt())
             } else {
                 if (facePresent) {
                     faceStatusView.text = "FACE: DETECTED ✓"
-                    faceStatusView.setTextColor(TEXT_PRIMARY)
+                    faceStatusView.setTextColor(0xFF047857.toInt())
                     rppgGraphView.setFlatline(false)
                 } else {
                     faceStatusView.text = "FACE: UNDETECTED"
